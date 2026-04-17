@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { VERSION } from '../config/version.js';
 import type { Db } from '../db/client.js';
 import type { Config } from '../config.js';
 import type { AnyLogger } from '../types/logger.js';
@@ -17,7 +18,7 @@ import { updateDockerPlan } from '../core/plans/update-docker.plan.js';
 export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpServer {
   const server = new McpServer({
     name: 'deployer',
-    version: '0.1.0',
+    version: VERSION,
   });
 
   const appSvc = new AppService(db);
