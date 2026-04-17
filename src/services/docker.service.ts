@@ -1,0 +1,80 @@
+import { execa } from 'execa';
+import type { AnyLogger } from '../types/logger.js';
+
+export class DockerService {
+  constructor(private logger: AnyLogger) {}
+
+  async build(opts: {
+    contextPath: string;
+    imageName: string;
+    imageTag: string;
+    dockerfile?: string;
+  }): Promise<void> {
+    this.logger.info({ imageName: opts.imageName, tag: opts.imageTag }, 'docker build');
+    const args = [
+      'build',
+      '-t', `${opts.imageName}:${opts.imageTag}`,
+    ];
+    if (opts.dockerfile) args.push('-f', opts.dockerfile);
+    args.push(opts.contextPath);
+    await execa('docker', args, { cwd: opts.contextPath });
+  }
+
+  async pull(imageName: string, tag = 'latest'): Promise<void> {
+    this.logger.info({ imageName, tag }, 'docker pull');
+    await execa('docker', ['pull', `${imageName}:${tag}`]);
+  }
+
+  async tag(imageName: string, sourceTag: string, targetTag: string): Promise<void> {
+    await execa('docker', ['tag', `${imageName}:${sourceTag}`, `${imageName}:${targetTag}`]);
+  }
+
+  async removeImage(imageName: string, tag: string): Promise<void> {
+    try {
+      await execa('docker', ['rmi', `${imageName}:${tag}`]);
+    } catch {
+      // image may not exist
+    }
+  }
+
+  async getImageId(imageName: string, tag: string): Promise<string | null> {
+    try {
+      const { stdout } = await execa('docker', [
+        'images', '-q', `${imageName}:${tag}`,
+      ]);
+      return stdout.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async composeUp(composePath: string, envFile?: string): Promise<void> {
+    this.logger.info({ composePath }, 'docker compose up');
+    const args = ['compose', 'up', '-d', '--build'];
+    if (envFile) args.push('--env-file', envFile);
+    await execa('docker', args, { cwd: composePath });
+  }
+
+  async composeDown(composePath: string): Promise<void> {
+    this.logger.info({ composePath }, 'docker compose down');
+    await execa('docker', ['compose', 'down'], { cwd: composePath });
+  }
+
+  async composeServiceNames(composePath: string): Promise<string[]> {
+    const { stdout } = await execa('docker', ['compose', 'config', '--services'], {
+      cwd: composePath,
+    });
+    return stdout.trim().split('\n').filter(Boolean);
+  }
+
+  async containerStatus(containerName: string): Promise<string | null> {
+    try {
+      const { stdout } = await execa('docker', [
+        'inspect', '--format', '{{.State.Status}}', containerName,
+      ]);
+      return stdout.trim();
+    } catch {
+      return null;
+    }
+  }
+}
