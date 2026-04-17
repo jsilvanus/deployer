@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const apps = sqliteTable('apps', {
   id:             text('id').primaryKey(),
@@ -63,3 +63,18 @@ export type SnapshotRow = typeof deploymentSnapshots.$inferSelect;
 export type NewSnapshotRow = typeof deploymentSnapshots.$inferInsert;
 export type EnvFileRow = typeof envFiles.$inferSelect;
 export type NewEnvFileRow = typeof envFiles.$inferInsert;
+
+export const appEnvVars = sqliteTable('app_env_vars', {
+  id:               text('id').primaryKey(),
+  appId:            text('app_id').notNull().references(() => apps.id),
+  key:              text('key').notNull(),
+  encryptedValue:   text('encrypted_value').notNull(), // AES-256-GCM, base64
+  iv:               text('iv').notNull(),               // base64 AES IV
+  createdAt:        integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt:        integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (t) => [
+  uniqueIndex('app_env_vars_app_id_key_unique').on(t.appId, t.key),
+]);
+
+export type AppEnvVarRow = typeof appEnvVars.$inferSelect;
+export type NewAppEnvVarRow = typeof appEnvVars.$inferInsert;

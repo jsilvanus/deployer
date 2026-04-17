@@ -1,14 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import { AppService } from '../../services/app.service.js';
+import { AppEnvService } from '../../services/app-env.service.js';
 import {
   createAppBody,
   updateAppBody,
   appIdParam,
 } from '../schemas/app.schema.js';
 import type { Db } from '../../db/client.js';
+import type { Config } from '../../config.js';
 
-export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db }) {
-  const svc = new AppService(opts.db);
+export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config }) {
+  const svc = new AppService(opts.db, opts.config.envEncryptionKey);
 
   // Guard: admin-only or scoped-to-app read
   function requireAdmin(request: typeof fastify extends { get: unknown } ? never : never) {
@@ -81,5 +83,63 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db }) {
     const app = await svc.findById(appId);
     if (!app) return reply.code(404).send({ error: 'App not found' });
     return svc.listDeployments(appId);
+  });
+
+  // ── Per-app env vars ────────────────────────────────────────────────────────
+
+  fastify.get('/apps/:appId/env', {
+    schema: { params: appIdParam },
+  }, async (request, reply) => {
+    const { appId } = request.params as { appId: string };
+    if (!request.isAdmin && request.scopedAppId !== appId) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+    const app = await svc.findById(appId);
+    if (!app) return reply.code(404).send({ error: 'App not found' });
+    const envSvc = new AppEnvService(opts.db, opts.config.envEncryptionKey);
+    const keys = await envSvc.listKeys(appId);
+    return { appId, keys };
+  });
+
+  fastify.put('/apps/:appId/env', {
+    schema: {
+      params: appIdParam,
+      body: {
+        type: 'object',
+        additionalProperties: { type: 'string' },
+      },
+    },
+  }, async (request, reply) => {
+    const { appId } = request.params as { appId: string };
+    if (!request.isAdmin && request.scopedAppId !== appId) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+    const app = await svc.findById(appId);
+    if (!app) return reply.code(404).send({ error: 'App not found' });
+    const vars = request.body as Record<string, string>;
+    const envSvc = new AppEnvService(opts.db, opts.config.envEncryptionKey);
+    await envSvc.setMany(appId, vars);
+    return reply.code(204).send();
+  });
+
+  fastify.delete('/apps/:appId/env/:key', {
+    schema: {
+      params: {
+        type: 'object',
+        required: ['appId', 'key'],
+        properties: { appId: { type: 'string' }, key: { type: 'string' } },
+      },
+    },
+  }, async (request, reply) => {
+    const { appId, key } = request.params as { appId: string; key: string };
+    if (!request.isAdmin && request.scopedAppId !== appId) {
+      return reply.code(403).send({ error: 'Forbidden' });
+    }
+    const app = await svc.findById(appId);
+    if (!app) return reply.code(404).send({ error: 'App not found' });
+    const envSvc = new AppEnvService(opts.db, opts.config.envEncryptionKey);
+    const deleted = await envSvc.delete(appId, key);
+    if (!deleted) return reply.code(404).send({ error: 'Key not found' });
+    return reply.code(204).send();
   });
 }

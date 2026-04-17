@@ -4,9 +4,10 @@ import { Pm2Service } from '../../services/pm2.service.js';
 import { DockerService } from '../../services/docker.service.js';
 import { appIdParam } from '../schemas/app.schema.js';
 import type { Db } from '../../db/client.js';
+import type { Config } from '../../config.js';
 
-export async function statusRoutes(fastify: FastifyInstance, opts: { db: Db }) {
-  const appSvc = new AppService(opts.db);
+export async function statusRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config }) {
+  const appSvc = new AppService(opts.db, opts.config.envEncryptionKey);
   const pm2 = new Pm2Service(fastify.log);
   const docker = new DockerService(fastify.log);
 

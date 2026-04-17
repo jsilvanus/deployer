@@ -42,5 +42,6 @@ export interface UpdateAppInput {
 
 export interface CreateAppResult {
   app: App;
-  apiKey: string; // returned only once at creation
+  apiKey: string;             // returned only once at creation
+  generatedDbPassword?: string; // set when dbEnabled — returned only once
 }

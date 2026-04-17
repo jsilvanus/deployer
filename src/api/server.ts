@@ -21,9 +21,9 @@ export async function createServer(config: Config, db: Db): Promise<FastifyInsta
   await fastify.register(errorHandlerPlugin);
   await fastify.register(authPlugin, { config, db });
   await fastify.register(healthRoutes);
-  await fastify.register(appsRoutes, { db });
+  await fastify.register(appsRoutes, { db, config });
   await fastify.register(deploymentsRoutes, { db, config });
-  await fastify.register(statusRoutes, { db });
+  await fastify.register(statusRoutes, { db, config });
 
   // Mount MCP server on /mcp (skip auth middleware — MCP handles its own token)
   const mcpServer = createMcpServer(db, config, fastify.log);

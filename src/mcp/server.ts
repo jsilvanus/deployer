@@ -5,6 +5,7 @@ import type { Db } from '../db/client.js';
 import type { Config } from '../config.js';
 import type { AnyLogger } from '../types/logger.js';
 import { AppService } from '../services/app.service.js';
+import { AppEnvService } from '../services/app-env.service.js';
 import { DeploymentService } from '../services/deployment.service.js';
 import { MigrationService } from '../services/migration.service.js';
 import { Pm2Service } from '../services/pm2.service.js';
@@ -21,7 +22,7 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
     version: VERSION,
   });
 
-  const appSvc = new AppService(db);
+  const appSvc = new AppService(db, config.envEncryptionKey);
   const deploymentSvc = new DeploymentService(db);
   const migSvc = new MigrationService(logger);
   const pm2Svc = new Pm2Service(logger);
@@ -284,6 +285,60 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
     async ({ deployment_id }) => {
       const snapshots = await deploymentSvc.getSnapshots(deployment_id);
       return { content: [{ type: 'text', text: JSON.stringify(snapshots, null, 2) }] };
+    },
+  );
+
+  // ── get_app_env_keys ───────────────────────────────────────────────────────
+  server.tool(
+    'get_app_env_keys',
+    'List stored per-app env var keys (values are not returned)',
+    { app_name: z.string().describe('App name') },
+    async ({ app_name }) => {
+      const app = await appSvc.findByName(app_name);
+      if (!app) return { content: [{ type: 'text', text: `App "${app_name}" not found` }] };
+      const envSvc = new AppEnvService(db, config.envEncryptionKey);
+      const keys = await envSvc.listKeys(app.id);
+      return { content: [{ type: 'text', text: JSON.stringify({ app: app_name, keys }, null, 2) }] };
+    },
+  );
+
+  // ── set_app_env ────────────────────────────────────────────────────────────
+  server.tool(
+    'set_app_env',
+    'Set one or more per-app env vars (encrypted at rest, injected into .env on next deploy/update)',
+    {
+      app_name: z.string().describe('App name'),
+      vars:     z.record(z.string()).describe('Key-value pairs to store'),
+    },
+    async ({ app_name, vars }) => {
+      const app = await appSvc.findByName(app_name);
+      if (!app) return { content: [{ type: 'text', text: `App "${app_name}" not found` }] };
+      const envSvc = new AppEnvService(db, config.envEncryptionKey);
+      await envSvc.setMany(app.id, vars);
+      return {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ app: app_name, stored: Object.keys(vars) }, null, 2),
+        }],
+      };
+    },
+  );
+
+  // ── delete_app_env ─────────────────────────────────────────────────────────
+  server.tool(
+    'delete_app_env',
+    'Delete a stored per-app env var by key',
+    {
+      app_name: z.string().describe('App name'),
+      key:      z.string().describe('Env var key to delete'),
+    },
+    async ({ app_name, key }) => {
+      const app = await appSvc.findByName(app_name);
+      if (!app) return { content: [{ type: 'text', text: `App "${app_name}" not found` }] };
+      const envSvc = new AppEnvService(db, config.envEncryptionKey);
+      const deleted = await envSvc.delete(app.id, key);
+      const msg = deleted ? `Deleted "${key}" from "${app_name}"` : `Key "${key}" not found for "${app_name}"`;
+      return { content: [{ type: 'text', text: msg }] };
     },
   );
 

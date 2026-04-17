@@ -1,6 +1,7 @@
 import type { DeploymentStep } from '../orchestrator.js';
 import type { StepContext } from '../../types/index.js';
 import { DatabaseService } from '../../services/database.service.js';
+import { AppEnvService } from '../../services/app-env.service.js';
 import type { DatabaseCreateSnapshotData } from '../../types/snapshot.js';
 
 export const databaseCreateStep: DeploymentStep = {
@@ -21,6 +22,7 @@ export const databaseCreateStep: DeploymentStep = {
 
   async execute(ctx: StepContext): Promise<void> {
     if (!ctx.app.dbEnabled) return;
+
     const dbSvc = new DatabaseService(ctx.logger);
     const dbName = ctx.app.dbName ?? ctx.app.name;
 
@@ -29,12 +31,16 @@ export const databaseCreateStep: DeploymentStep = {
       return;
     }
 
-    const dbPassword = (ctx.options?.['dbPassword'] as string | undefined)
-      ?? process.env['DB_PASSWORD']
-      ?? dbName;
+    // Resolution order: stored per-app var → request option → env var → db name (insecure fallback)
+    const appEnvSvc = new AppEnvService(ctx.db, ctx.config.envEncryptionKey);
+    const password =
+      (await appEnvSvc.get(ctx.app.id, 'DB_PASSWORD')) ??
+      (ctx.options?.['dbPassword'] as string | undefined) ??
+      process.env['DB_PASSWORD'] ??
+      dbName;
 
     await dbSvc.createDatabase(dbName);
-    await dbSvc.createUser(dbName, dbPassword);
+    await dbSvc.createUser(dbName, password);
     await dbSvc.grantAll(dbName, dbName);
   },
 

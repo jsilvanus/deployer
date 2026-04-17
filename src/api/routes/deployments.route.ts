@@ -17,7 +17,7 @@ export async function deploymentsRoutes(
   opts: { db: Db; config: Config },
 ) {
   const deploymentSvc = new DeploymentService(opts.db);
-  const appSvc = new AppService(opts.db);
+  const appSvc = new AppService(opts.db, opts.config.envEncryptionKey);
   const orchestrator = new DeploymentOrchestrator(
     deploymentSvc,
     fastify.log,

@@ -5,6 +5,7 @@ import { apps, deployments } from '../db/schema.js';
 import type { Db } from '../db/client.js';
 import type { App, CreateAppInput, UpdateAppInput, CreateAppResult } from '../types/index.js';
 import type { Deployment } from '../types/index.js';
+import { AppEnvService } from './app-env.service.js';
 
 function rowToApp(row: typeof apps.$inferSelect): App {
   return {
@@ -20,9 +21,9 @@ function rowToApp(row: typeof apps.$inferSelect): App {
     apiKeyPrefix:  row.apiKeyPrefix,
     createdAt:     row.createdAt,
     updatedAt:     row.updatedAt,
-    ...(row.domain != null    ? { domain:  row.domain  } : {}),
-    ...(row.dbName != null    ? { dbName:  row.dbName  } : {}),
-    ...(row.port   != null    ? { port:    row.port    } : {}),
+    ...(row.domain != null ? { domain: row.domain } : {}),
+    ...(row.dbName != null ? { dbName: row.dbName } : {}),
+    ...(row.port   != null ? { port:   row.port   } : {}),
   };
 }
 
@@ -44,7 +45,7 @@ function rowToDeployment(row: typeof deployments.$inferSelect): Deployment {
 }
 
 export class AppService {
-  constructor(private db: Db) {}
+  constructor(private db: Db, private encryptionKeyHex: string) {}
 
   async create(input: CreateAppInput): Promise<CreateAppResult> {
     const apiKey = randomBytes(32).toString('hex');
@@ -76,7 +77,27 @@ export class AppService {
 
     if (!row) throw new Error('Insert failed');
 
-    return { app: rowToApp(row), apiKey };
+    const app = rowToApp(row);
+    const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
+
+    // Auto-generate a dedicated DB password and DATABASE_URL when dbEnabled
+    let generatedDbPassword: string | undefined;
+    if (input.dbEnabled) {
+      const dbName = input.dbName ?? input.name;
+      generatedDbPassword = randomBytes(16).toString('hex');
+      await envSvc.set(app.id, 'DB_PASSWORD', generatedDbPassword);
+      await envSvc.set(
+        app.id,
+        'DATABASE_URL',
+        `postgres://${dbName}:${generatedDbPassword}@localhost/${dbName}`,
+      );
+    }
+
+    return {
+      app,
+      apiKey,
+      ...(generatedDbPassword !== undefined ? { generatedDbPassword } : {}),
+    };
   }
 
   async findById(id: string): Promise<App | null> {
@@ -104,6 +125,9 @@ export class AppService {
   }
 
   async delete(id: string): Promise<void> {
+    // Clean up stored env vars too
+    const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
+    await envSvc.deleteAll(id);
     await this.db.delete(apps).where(eq(apps.id, id));
   }
 
