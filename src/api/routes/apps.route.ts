@@ -1,3 +1,4 @@
+import { resolve } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { AppService } from '../../services/app.service.js';
 import { AppEnvService } from '../../services/app-env.service.js';
@@ -31,7 +32,18 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
       name: string; type: 'node' | 'docker'; repoUrl: string;
       branch?: string; deployPath: string; dockerCompose?: boolean;
       nginxEnabled?: boolean; domain?: string; dbEnabled?: boolean; dbName?: string;
+      port?: number;
     };
+
+    const allowedPaths = opts.config.allowedDeployPaths.split(',').map(p => resolve(p.trim()));
+    const resolvedDeploy = resolve(body.deployPath);
+    const isAllowed = allowedPaths.some(p => resolvedDeploy === p || resolvedDeploy.startsWith(p + '/'));
+    if (!isAllowed) {
+      return reply.code(400).send({
+        error: `deployPath must be under one of: ${allowedPaths.join(', ')}`,
+      });
+    }
+
     const result = await svc.create(body);
     return reply.code(201).send(result);
   });
