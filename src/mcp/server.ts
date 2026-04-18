@@ -588,7 +588,10 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
         ? await traefikSvc.detectMode()
         : requestedMode as TraefikMode;
 
-      const composeContent = traefikSvc.generateCompose(mode, { acmeEmail: acme_email, port });
+      const composeContent = traefikSvc.generateCompose(mode, {
+        ...(acme_email !== undefined && { acmeEmail: acme_email }),
+        port,
+      });
       const deployPath = resolve(
         config.allowedDeployPaths.split(',')[0]?.trim() ?? '/srv/apps',
         'traefik',

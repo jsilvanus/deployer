@@ -7,6 +7,7 @@ import type { App, CreateAppInput, UpdateAppInput, CreateAppResult } from '../ty
 import type { Deployment } from '../types/index.js';
 import { AppEnvService } from './app-env.service.js';
 import { ConflictError } from '../errors.js';
+import type { LastModifiedCache } from '../cache/last-modified.cache.js';
 
 function rowToApp(row: typeof apps.$inferSelect): App {
   return {
@@ -53,7 +54,11 @@ function rowToDeployment(row: typeof deployments.$inferSelect): Deployment {
 }
 
 export class AppService {
-  constructor(private db: Db, private encryptionKeyHex: string) {}
+  constructor(
+    private db: Db,
+    private encryptionKeyHex: string,
+    private cache?: LastModifiedCache,
+  ) {}
 
   async create(input: CreateAppInput): Promise<CreateAppResult> {
     await this.assertNginxUnique(input.domain, input.nginxLocation ?? '/', input.nginxEnabled ?? false, null);
@@ -98,6 +103,8 @@ export class AppService {
     if (!row) throw new Error('Insert failed');
 
     const app = rowToApp(row);
+    this.cache?.touch(`app:${app.id}`, now);
+    this.cache?.touch('apps:list', now);
     const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
 
     // Auto-generate DATABASE_URL (and DB_PASSWORD for postgres) when dbEnabled
@@ -173,19 +180,25 @@ export class AppService {
       await envSvc.set(id, '_COMPOSE_CONTENT', composeContent);
     }
 
+    const updatedAt = new Date();
     const [row] = await this.db
       .update(apps)
-      .set({ ...dbFields, updatedAt: new Date() })
+      .set({ ...dbFields, updatedAt })
       .where(eq(apps.id, id))
       .returning();
+    if (row) {
+      this.cache?.touch(`app:${id}`, updatedAt);
+      this.cache?.touch('apps:list', updatedAt);
+    }
     return row ? rowToApp(row) : null;
   }
 
   async delete(id: string): Promise<void> {
-    // Clean up stored env vars too
     const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
     await envSvc.deleteAll(id);
     await this.db.delete(apps).where(eq(apps.id, id));
+    this.cache?.delete(`app:${id}`);
+    this.cache?.touch('apps:list');
   }
 
   async listDeployments(appId: string, limit = 20): Promise<Deployment[]> {

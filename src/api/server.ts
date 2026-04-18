@@ -2,6 +2,8 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { Server, IncomingMessage, ServerResponse } from 'node:http';
 import authPlugin from './plugins/auth.plugin.js';
 import errorHandlerPlugin from './plugins/error-handler.plugin.js';
+import rateLimitPlugin from './plugins/rate-limit.plugin.js';
+import { LastModifiedCache } from '../cache/last-modified.cache.js';
 import { healthRoutes } from './routes/health.route.js';
 import { appsRoutes } from './routes/apps.route.js';
 import { deploymentsRoutes } from './routes/deployments.route.js';
@@ -21,16 +23,18 @@ export async function createServer(config: Config, db: Db): Promise<FastifyInsta
     : { level: process.env['LOG_LEVEL'] ?? 'info' };
 
   const fastify = Fastify<Server, IncomingMessage, ServerResponse>({ logger: loggerOpts });
+  const cache = new LastModifiedCache();
 
   await fastify.register(errorHandlerPlugin);
+  await fastify.register(rateLimitPlugin);
   await fastify.register(authPlugin, { config, db });
   await fastify.register(healthRoutes);
-  await fastify.register(appsRoutes, { db, config });
-  await fastify.register(deploymentsRoutes, { db, config });
+  await fastify.register(appsRoutes, { db, config, cache });
+  await fastify.register(deploymentsRoutes, { db, config, cache });
   await fastify.register(statusRoutes, { db, config });
   await fastify.register(logsRoutes, { db, config });
   await fastify.register(metricsRoutes, { db, config });
-  await fastify.register(setupRoutes, { db, config });
+  await fastify.register(setupRoutes, { db, config, cache });
 
   // Start metrics poller after server is ready; stop on close
   fastify.addHook('onReady', async () => {

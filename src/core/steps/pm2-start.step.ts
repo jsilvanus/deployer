@@ -60,7 +60,7 @@ export const pm2StartStep: DeploymentStep = {
       script,
       cwd:         ctx.app.deployPath,
       envFile:     join(ctx.app.deployPath, '.env'),
-      interpreter,
+      ...(interpreter !== undefined && { interpreter }),
     });
   },
 

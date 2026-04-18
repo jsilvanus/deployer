@@ -48,6 +48,7 @@
   "license": "MIT",
   "dependencies": {
     "@fastify/bearer-auth": "^9.3.0",
+    "@fastify/rate-limit": "^10.3.0",
     "@modelcontextprotocol/sdk": "^1.10.0",
     "better-sqlite3": "^11.9.1",
     "drizzle-orm": "^0.41.0",

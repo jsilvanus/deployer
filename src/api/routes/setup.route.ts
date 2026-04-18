@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { execa } from 'execa';
 import type { FastifyInstance } from 'fastify';
+import { SETUP_LIMIT } from '../plugins/rate-limit.plugin.js';
 import { AppService } from '../../services/app.service.js';
 import { DeploymentService } from '../../services/deployment.service.js';
 import { DeploymentOrchestrator } from '../../core/orchestrator.js';
@@ -12,13 +13,14 @@ import { updateComposePlan } from '../../core/plans/update-compose.plan.js';
 import { updateDeployerPlan } from '../../core/plans/update-deployer.plan.js';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
+import type { LastModifiedCache } from '../../cache/last-modified.cache.js';
 
 const TRAEFIK_NAME = 'traefik';
 const DEFAULT_PORT = 8080;
 
-export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config }) {
-  const appSvc = new AppService(opts.db, opts.config.envEncryptionKey);
-  const deploymentSvc = new DeploymentService(opts.db);
+export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config; cache: LastModifiedCache }) {
+  const appSvc = new AppService(opts.db, opts.config.envEncryptionKey, opts.cache);
+  const deploymentSvc = new DeploymentService(opts.db, opts.cache);
   const orchestrator = new DeploymentOrchestrator(
     deploymentSvc,
     fastify.log,
@@ -27,6 +29,7 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
   );
 
   fastify.post('/setup/traefik', {
+    config: { rateLimit: SETUP_LIMIT },
     schema: {
       body: {
         type: 'object',
@@ -55,7 +58,10 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
     const mode = requestedMode === 'auto' ? await traefikSvc.detectMode() : requestedMode;
     const port = body.port ?? DEFAULT_PORT;
 
-    const composeContent = traefikSvc.generateCompose(mode, { acmeEmail: body.acmeEmail, port });
+    const composeContent = traefikSvc.generateCompose(mode, {
+      ...(body.acmeEmail !== undefined && { acmeEmail: body.acmeEmail }),
+      port,
+    });
 
     const deployPath = resolve(
       opts.config.allowedDeployPaths.split(',')[0]?.trim() ?? '/srv/apps',
@@ -129,6 +135,7 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
   // ── Self-registration ──────────────────────────────────────────────────────
 
   fastify.post('/setup/self-register', {
+    config: { rateLimit: SETUP_LIMIT },
     schema: {
       body: {
         type: 'object',
@@ -184,6 +191,7 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
   // ── Self-update ────────────────────────────────────────────────────────────
 
   fastify.post('/setup/self-update', {
+    config: { rateLimit: SETUP_LIMIT },
     schema: {
       body: {
         type: 'object',
