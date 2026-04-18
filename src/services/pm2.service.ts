@@ -23,14 +23,16 @@ export class Pm2Service {
     script: string;
     cwd: string;
     envFile?: string;
+    interpreter?: string;
     instances?: number;
   }): Promise<void> {
-    this.logger.info({ name: opts.name }, 'pm2 start');
+    this.logger.info({ name: opts.name, interpreter: opts.interpreter }, 'pm2 start');
     const args = [
       'start', opts.script,
       '--name', opts.name,
       '--cwd', opts.cwd,
     ];
+    if (opts.interpreter) args.push('--interpreter', opts.interpreter);
     if (opts.envFile) args.push('--env-file', opts.envFile);
     if (opts.instances) args.push('-i', String(opts.instances));
     await this.pm2(...args);

@@ -13,6 +13,8 @@ import { deployDockerPlan } from '../../core/plans/deploy-docker.plan.js';
 import { updateDockerPlan } from '../../core/plans/update-docker.plan.js';
 import { deployComposePlan } from '../../core/plans/deploy-compose.plan.js';
 import { updateComposePlan } from '../../core/plans/update-compose.plan.js';
+import { deployPythonPlan } from '../../core/plans/deploy-python.plan.js';
+import { updatePythonPlan } from '../../core/plans/update-python.plan.js';
 
 export async function deploymentsRoutes(
   fastify: FastifyInstance,
@@ -72,6 +74,7 @@ export async function deploymentsRoutes(
     const deployment = await deploymentSvc.create(appId, 'deploy', body.triggeredBy ?? 'api');
     const plan = app.type === 'compose' ? deployComposePlan
                : app.type === 'docker'  ? deployDockerPlan
+               : app.type === 'python'  ? deployPythonPlan
                : deployNodePlan;
     const options: Record<string, unknown> = {
       allowDbDrop: body.allowDbDrop ?? false,
@@ -112,6 +115,7 @@ export async function deploymentsRoutes(
     const deployment = await deploymentSvc.create(appId, 'update', body.triggeredBy ?? 'api');
     const plan = app.type === 'compose' ? updateComposePlan
                : app.type === 'docker'  ? updateDockerPlan
+               : app.type === 'python'  ? updatePythonPlan
                : updateNodePlan;
     const options: Record<string, unknown> = {
       allowDbDrop: body.allowDbDrop ?? false,

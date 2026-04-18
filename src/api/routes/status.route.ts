@@ -21,7 +21,7 @@ export async function statusRoutes(fastify: FastifyInstance, opts: { db: Db; con
     const app = await appSvc.findById(appId);
     if (!app) return reply.code(404).send({ error: 'App not found' });
 
-    if (app.type === 'node') {
+    if (app.type === 'node' || app.type === 'python') {
       const info = await pm2.status(app.name);
       return {
         appId: app.id,

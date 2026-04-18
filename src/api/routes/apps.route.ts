@@ -30,7 +30,7 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
   }, async (request, reply) => {
     if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
     const body = request.body as {
-      name: string; type: 'node' | 'docker' | 'compose'; repoUrl?: string;
+      name: string; type: 'node' | 'python' | 'docker' | 'compose'; repoUrl?: string;
       branch?: string; deployPath: string; composeContent?: string;
       primaryService?: string; dockerCompose?: boolean;
       nginxEnabled?: boolean; nginxLocation?: string;

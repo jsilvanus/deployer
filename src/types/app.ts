@@ -1,4 +1,4 @@
-export type AppType = 'node' | 'docker' | 'compose';
+export type AppType = 'node' | 'python' | 'docker' | 'compose';
 export type DbType = 'postgres' | 'sqlite';
 
 export interface App {
