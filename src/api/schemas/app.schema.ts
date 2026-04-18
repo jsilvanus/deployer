@@ -9,6 +9,7 @@ export const createAppBody = {
     deployPath:     { type: 'string', minLength: 1 },
     composeContent:  { type: 'string', minLength: 1 },
     primaryService:  { type: 'string', minLength: 1 },
+    internalNetwork: { type: 'boolean', default: true },
     dockerCompose:   { type: 'boolean', default: false },
     nginxEnabled:   { type: 'boolean', default: false },
     nginxLocation:  { type: 'string', default: '/' },
@@ -26,6 +27,7 @@ export const updateAppBody = {
   properties: {
     composeContent:  { type: 'string', minLength: 1 },
     primaryService:  { type: 'string', minLength: 1 },
+    internalNetwork: { type: 'boolean' },
     branch:          { type: 'string', minLength: 1 },
     domain:         { type: 'string' },
     nginxEnabled:   { type: 'boolean' },

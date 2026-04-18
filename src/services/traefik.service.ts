@@ -38,6 +38,13 @@ export class TraefikService {
     ].join('\n');
   }
 
+  generateInternalOverride(serviceNames: string[]): string {
+    const services = serviceNames
+      .map(s => `  ${s}:\n    networks:\n      - deployer-internal`)
+      .join('\n');
+    return `services:\n${services}\n\nnetworks:\n  deployer-internal:\n    external: true\n`;
+  }
+
   generateAppOverride(opts: {
     appName: string;
     primaryService: string;

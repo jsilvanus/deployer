@@ -50,6 +50,13 @@
       "when": 1776530000000,
       "tag": "0006_primary_service",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1776540000000,
+      "tag": "0007_internal_network",
+      "breakpoints": true
     }
   ]
 }

@@ -71,6 +71,14 @@ export class DockerService {
     return stdout.trim().split('\n').filter(Boolean);
   }
 
+  async networkCreate(name: string): Promise<void> {
+    try {
+      await execa('docker', ['network', 'create', '--driver', 'bridge', name]);
+    } catch {
+      // already exists — ignore
+    }
+  }
+
   async containerStatus(containerName: string): Promise<string | null> {
     try {
       const { stdout } = await execa('docker', [

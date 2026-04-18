@@ -4,6 +4,7 @@ import { AppService } from '../../services/app.service.js';
 import { DeploymentService } from '../../services/deployment.service.js';
 import { DeploymentOrchestrator } from '../../core/orchestrator.js';
 import { TraefikService } from '../../services/traefik.service.js';
+import { DockerService } from '../../services/docker.service.js';
 import { NginxService } from '../../services/nginx.service.js';
 import { deployComposePlan } from '../../core/plans/deploy-compose.plan.js';
 import { updateComposePlan } from '../../core/plans/update-compose.plan.js';
@@ -43,6 +44,9 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
       acmeEmail?: string;
       port?: number;
     };
+
+    const docker = new DockerService(fastify.log);
+    await docker.networkCreate('deployer-internal');
 
     const traefikSvc = new TraefikService();
     const requestedMode = body.mode ?? 'auto';

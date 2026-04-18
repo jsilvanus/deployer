@@ -30,6 +30,7 @@ function rowToApp(row: typeof apps.$inferSelect): App {
     ...(row.pgPort         != null ? { pgPort:         row.pgPort         } : {}),
     ...(row.pgAdminUser    != null ? { pgAdminUser:    row.pgAdminUser    } : {}),
     ...(row.primaryService != null ? { primaryService: row.primaryService } : {}),
+    internalNetwork: row.internalNetwork,
     ...(row.port           != null ? { port:           row.port           } : {}),
   };
 }
@@ -82,8 +83,9 @@ export class AppService {
         pgHost:         input.pgHost,
         pgPort:         input.pgPort,
         pgAdminUser:    input.pgAdminUser,
-        primaryService: input.primaryService,
-        port:           input.port,
+        primaryService:  input.primaryService,
+        internalNetwork: input.internalNetwork ?? true,
+        port:            input.port,
         apiKeyHash,
         apiKeyPrefix,
         createdAt:     now,
