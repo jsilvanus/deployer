@@ -24,9 +24,14 @@ function rowToApp(row: typeof apps.$inferSelect): App {
     apiKeyPrefix:  row.apiKeyPrefix,
     createdAt:     row.createdAt,
     updatedAt:     row.updatedAt,
-    ...(row.domain != null ? { domain: row.domain } : {}),
-    ...(row.dbName != null ? { dbName: row.dbName } : {}),
-    ...(row.port   != null ? { port:   row.port   } : {}),
+    ...(row.domain      != null ? { domain:      row.domain      } : {}),
+    ...(row.dbName      != null ? { dbName:      row.dbName      } : {}),
+    ...(row.pgHost         != null ? { pgHost:         row.pgHost         } : {}),
+    ...(row.pgPort         != null ? { pgPort:         row.pgPort         } : {}),
+    ...(row.pgAdminUser    != null ? { pgAdminUser:    row.pgAdminUser    } : {}),
+    ...(row.primaryService != null ? { primaryService: row.primaryService } : {}),
+    internalNetwork: row.internalNetwork,
+    ...(row.port           != null ? { port:           row.port           } : {}),
   };
 }
 
@@ -65,7 +70,7 @@ export class AppService {
         id:            randomUUID(),
         name:          input.name,
         type:          input.type,
-        repoUrl:       input.repoUrl,
+        repoUrl:       input.repoUrl ?? '',
         branch:        input.branch ?? 'main',
         deployPath:    input.deployPath,
         dockerCompose: input.dockerCompose ?? false,
@@ -75,7 +80,14 @@ export class AppService {
         dbEnabled:     input.dbEnabled ?? false,
         dbType:        input.dbType ?? 'postgres',
         dbName:        input.dbName,
-        port:          input.port,
+        pgHost:         input.pgHost,
+        pgPort:         input.pgPort,
+        pgAdminUser:    input.pgAdminUser,
+        primaryService:  input.primaryService,
+        internalNetwork: (input.type === 'node' || input.type === 'python')
+          ? false
+          : (input.internalNetwork ?? true),
+        port:            input.port,
         apiKeyHash,
         apiKeyPrefix,
         createdAt:     now,
@@ -96,14 +108,24 @@ export class AppService {
       if (dbType === 'sqlite') {
         await envSvc.set(app.id, 'DATABASE_URL', `file:${input.deployPath}/${dbName}.db`);
       } else {
+        const host = input.pgHost ?? 'localhost';
+        const port = input.pgPort ?? 5432;
         generatedDbPassword = randomBytes(16).toString('hex');
         await envSvc.set(app.id, 'DB_PASSWORD', generatedDbPassword);
         await envSvc.set(
           app.id,
           'DATABASE_URL',
-          `postgres://${dbName}:${generatedDbPassword}@localhost/${dbName}`,
+          `postgres://${dbName}:${generatedDbPassword}@${host}:${port}/${dbName}`,
         );
       }
+    }
+
+    if (input.pgAdminPassword) {
+      await envSvc.set(app.id, '_PG_ADMIN_PASSWORD', input.pgAdminPassword);
+    }
+
+    if (input.composeContent) {
+      await envSvc.set(app.id, '_COMPOSE_CONTENT', input.composeContent);
     }
 
     return {
@@ -137,9 +159,23 @@ export class AppService {
     const location     = input.nginxLocation ?? existing.nginxLocation;
     await this.assertNginxUnique(domain, location, nginxEnabled, id);
 
+    const { pgAdminPassword, composeContent, internalNetwork: rawInternalNetwork, ...otherDbFields } = input;
+    const isDockerApp = existing.type === 'docker' || existing.type === 'compose';
+    const dbFields = isDockerApp
+      ? { ...otherDbFields, internalNetwork: rawInternalNetwork }
+      : otherDbFields;
+    const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
+
+    if (pgAdminPassword) {
+      await envSvc.set(id, '_PG_ADMIN_PASSWORD', pgAdminPassword);
+    }
+    if (composeContent) {
+      await envSvc.set(id, '_COMPOSE_CONTENT', composeContent);
+    }
+
     const [row] = await this.db
       .update(apps)
-      .set({ ...input, updatedAt: new Date() })
+      .set({ ...dbFields, updatedAt: new Date() })
       .where(eq(apps.id, id))
       .returning();
     return row ? rowToApp(row) : null;

@@ -6,6 +6,10 @@ import { healthRoutes } from './routes/health.route.js';
 import { appsRoutes } from './routes/apps.route.js';
 import { deploymentsRoutes } from './routes/deployments.route.js';
 import { statusRoutes } from './routes/status.route.js';
+import { logsRoutes } from './routes/logs.route.js';
+import { metricsRoutes } from './routes/metrics.route.js';
+import { setupRoutes } from './routes/setup.route.js';
+import { MetricsService } from '../services/metrics.service.js';
 import { createMcpServer } from '../mcp/server.js';
 import { mountMcpTransport } from '../mcp/transport.js';
 import type { Db } from '../db/client.js';
@@ -24,6 +28,16 @@ export async function createServer(config: Config, db: Db): Promise<FastifyInsta
   await fastify.register(appsRoutes, { db, config });
   await fastify.register(deploymentsRoutes, { db, config });
   await fastify.register(statusRoutes, { db, config });
+  await fastify.register(logsRoutes, { db, config });
+  await fastify.register(metricsRoutes, { db, config });
+  await fastify.register(setupRoutes, { db, config });
+
+  // Start metrics poller after server is ready; stop on close
+  fastify.addHook('onReady', async () => {
+    const svc = new MetricsService(db, fastify.log);
+    const timer = svc.startPoller();
+    fastify.addHook('onClose', async () => clearInterval(timer));
+  });
 
   // Mount MCP server on /mcp (skip auth middleware — MCP handles its own token)
   const mcpServer = createMcpServer(db, config, fastify.log);

@@ -1,4 +1,4 @@
-export type AppType = 'node' | 'docker';
+export type AppType = 'node' | 'python' | 'docker' | 'compose';
 export type DbType = 'postgres' | 'sqlite';
 
 export interface App {
@@ -15,6 +15,11 @@ export interface App {
   dbEnabled: boolean;
   dbType: DbType;
   dbName?: string;
+  pgHost?: string;
+  pgPort?: number;
+  pgAdminUser?: string;
+  primaryService?: string;
+  internalNetwork: boolean;
   apiKeyPrefix: string;
   port?: number;
   createdAt: Date;
@@ -24,8 +29,9 @@ export interface App {
 export interface CreateAppInput {
   name: string;
   type: AppType;
-  repoUrl: string;
+  repoUrl?: string;
   branch?: string;
+  composeContent?: string;
   deployPath: string;
   dockerCompose?: boolean;
   nginxEnabled?: boolean;
@@ -34,10 +40,17 @@ export interface CreateAppInput {
   dbEnabled?: boolean;
   dbType?: DbType;
   dbName?: string;
+  pgHost?: string;
+  pgPort?: number;
+  pgAdminUser?: string;
+  pgAdminPassword?: string;
+  primaryService?: string;
+  internalNetwork?: boolean;
   port?: number;
 }
 
 export interface UpdateAppInput {
+  composeContent?: string;
   branch?: string;
   domain?: string;
   nginxEnabled?: boolean;
@@ -45,6 +58,12 @@ export interface UpdateAppInput {
   dbEnabled?: boolean;
   dbType?: DbType;
   dbName?: string;
+  pgHost?: string;
+  pgPort?: number;
+  pgAdminUser?: string;
+  pgAdminPassword?: string;
+  primaryService?: string;
+  internalNetwork?: boolean;
 }
 
 export interface CreateAppResult {

@@ -1,8 +1,17 @@
 import type { DeploymentStep } from '../orchestrator.js';
-import type { StepContext } from '../../types/index.js';
-import { DatabaseService } from '../../services/database.service.js';
+import type { StepContext, App } from '../../types/index.js';
+import { DatabaseService, type PgConnection } from '../../services/database.service.js';
 import { AppEnvService } from '../../services/app-env.service.js';
 import type { DatabaseCreateSnapshotData } from '../../types/snapshot.js';
+
+async function pgConnectionFor(app: App, envSvc: AppEnvService): Promise<PgConnection> {
+  return {
+    host:     app.pgHost     ?? 'localhost',
+    port:     app.pgPort     ?? 5432,
+    user:     app.pgAdminUser ?? 'postgres',
+    password: (await envSvc.get(app.id, '_PG_ADMIN_PASSWORD')) ?? '',
+  };
+}
 
 export const databaseCreateStep: DeploymentStep = {
   name: 'database-create',
@@ -14,7 +23,8 @@ export const databaseCreateStep: DeploymentStep = {
       return data as unknown as Record<string, unknown>;
     }
 
-    const dbSvc = new DatabaseService(ctx.logger);
+    const appEnvSvcSnap = new AppEnvService(ctx.db, ctx.config.envEncryptionKey);
+    const dbSvc = new DatabaseService(ctx.logger, await pgConnectionFor(ctx.app, appEnvSvcSnap));
     const dbName = ctx.app.dbName ?? ctx.app.name;
     const existed = await dbSvc.databaseExists(dbName);
     const data: DatabaseCreateSnapshotData = {
@@ -32,7 +42,8 @@ export const databaseCreateStep: DeploymentStep = {
       return;
     }
 
-    const dbSvc = new DatabaseService(ctx.logger);
+    const appEnvSvc = new AppEnvService(ctx.db, ctx.config.envEncryptionKey);
+    const dbSvc = new DatabaseService(ctx.logger, await pgConnectionFor(ctx.app, appEnvSvc));
     const dbName = ctx.app.dbName ?? ctx.app.name;
 
     if (await dbSvc.databaseExists(dbName)) {
@@ -41,7 +52,6 @@ export const databaseCreateStep: DeploymentStep = {
     }
 
     // Resolution order: stored per-app var → request option → env var → db name (insecure fallback)
-    const appEnvSvc = new AppEnvService(ctx.db, ctx.config.envEncryptionKey);
     const password =
       (await appEnvSvc.get(ctx.app.id, 'DB_PASSWORD')) ??
       (ctx.options?.['dbPassword'] as string | undefined) ??
@@ -65,7 +75,8 @@ export const databaseCreateStep: DeploymentStep = {
       return;
     }
 
-    const dbSvc = new DatabaseService(ctx.logger);
+    const appEnvSvcRollback = new AppEnvService(ctx.db, ctx.config.envEncryptionKey);
+    const dbSvc = new DatabaseService(ctx.logger, await pgConnectionFor(ctx.app, appEnvSvcRollback));
     await dbSvc.dropDatabase(data.dbName);
     await dbSvc.dropUser(data.dbUser);
   },

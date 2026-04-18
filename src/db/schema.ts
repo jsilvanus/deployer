@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, uniqueIndex, real } from 'drizzle-orm/sqlite-core';
 
 export const apps = sqliteTable('apps', {
   id:             text('id').primaryKey(),
@@ -14,6 +14,11 @@ export const apps = sqliteTable('apps', {
   dbEnabled:      integer('db_enabled', { mode: 'boolean' }).notNull().default(false),
   dbType:         text('db_type').notNull().default('postgres'),
   dbName:         text('db_name'),
+  pgHost:         text('pg_host'),
+  pgPort:         integer('pg_port'),
+  pgAdminUser:    text('pg_admin_user'),
+  primaryService: text('primary_service'),
+  internalNetwork: integer('internal_network', { mode: 'boolean' }).notNull().default(true),
   apiKeyHash:     text('api_key_hash').notNull(),
   apiKeyPrefix:   text('api_key_prefix').notNull(),
   port:           integer('port'),
@@ -80,3 +85,15 @@ export const appEnvVars = sqliteTable('app_env_vars', {
 
 export type AppEnvVarRow = typeof appEnvVars.$inferSelect;
 export type NewAppEnvVarRow = typeof appEnvVars.$inferInsert;
+
+export const appMetrics = sqliteTable('app_metrics', {
+  id:        text('id').primaryKey(),
+  appId:     text('app_id').notNull().references(() => apps.id),
+  timestamp: integer('timestamp').notNull(), // Unix seconds
+  status:    text('status').notNull(),
+  cpu:       real('cpu'),
+  memoryMb:  real('memory_mb'),
+});
+
+export type AppMetricRow = typeof appMetrics.$inferSelect;
+export type NewAppMetricRow = typeof appMetrics.$inferInsert;

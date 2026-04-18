@@ -21,12 +21,12 @@ export async function statusRoutes(fastify: FastifyInstance, opts: { db: Db; con
     const app = await appSvc.findById(appId);
     if (!app) return reply.code(404).send({ error: 'App not found' });
 
-    if (app.type === 'node') {
+    if (app.type === 'node' || app.type === 'python') {
       const info = await pm2.status(app.name);
       return {
         appId: app.id,
         appName: app.name,
-        type: 'node',
+        type: app.type,
         status: info?.status ?? 'not_found',
         pid: info?.pid ?? null,
         memory: info?.memory ?? null,
@@ -34,13 +34,20 @@ export async function statusRoutes(fastify: FastifyInstance, opts: { db: Db; con
         uptime: info?.uptime ?? null,
       };
     } else {
-      const containerName = app.name;
-      const containerStatus = await docker.containerStatus(containerName);
+      const [ps, stats] = await Promise.all([
+        docker.composePsStatus(app.deployPath),
+        docker.composeStats(app.deployPath),
+      ]);
+      const statsMap = new Map(stats.map(s => [s.name, s]));
       return {
         appId: app.id,
         appName: app.name,
-        type: 'docker',
-        status: containerStatus ?? 'not_found',
+        type: app.type,
+        status: ps.status,
+        services: ps.services.map(svc => ({
+          ...svc,
+          ...statsMap.get(svc.name),
+        })),
       };
     }
   });

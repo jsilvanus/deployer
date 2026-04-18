@@ -30,11 +30,19 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
   }, async (request, reply) => {
     if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
     const body = request.body as {
-      name: string; type: 'node' | 'docker'; repoUrl: string;
-      branch?: string; deployPath: string; dockerCompose?: boolean;
-      nginxEnabled?: boolean; nginxLocation?: string; domain?: string;
-      dbEnabled?: boolean; dbName?: string; port?: number;
+      name: string; type: 'node' | 'python' | 'docker' | 'compose'; repoUrl?: string;
+      branch?: string; deployPath: string; composeContent?: string;
+      primaryService?: string; dockerCompose?: boolean;
+      nginxEnabled?: boolean; nginxLocation?: string;
+      domain?: string; dbEnabled?: boolean; dbName?: string; port?: number;
     };
+
+    if (body.type !== 'compose' && !body.repoUrl) {
+      return reply.code(400).send({ error: 'repoUrl is required for node and docker apps' });
+    }
+    if (body.type === 'compose' && !body.composeContent) {
+      return reply.code(400).send({ error: 'composeContent is required for compose apps' });
+    }
 
     const allowedPaths = opts.config.allowedDeployPaths.split(',').map(p => resolve(p.trim()));
     const resolvedDeploy = resolve(body.deployPath);
@@ -72,8 +80,8 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
     if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
     const { appId } = request.params as { appId: string };
     const body = request.body as {
-      branch?: string; domain?: string; nginxEnabled?: boolean; nginxLocation?: string;
-      dbEnabled?: boolean; dbName?: string;
+      composeContent?: string; primaryService?: string; branch?: string; domain?: string;
+      nginxEnabled?: boolean; nginxLocation?: string; dbEnabled?: boolean; dbName?: string;
     };
     let app;
     try {
