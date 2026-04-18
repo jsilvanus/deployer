@@ -24,7 +24,7 @@ export const preflightStep: DeploymentStep = {
 async function checkNginxConflict(ctx: StepContext): Promise<void> {
   if (!ctx.app.nginxEnabled || !ctx.app.domain) return;
 
-  const nginx = new NginxService(ctx.logger);
+  const nginx    = new NginxService(ctx.logger);
   const conflict = await nginx.findExternalConflict(
     ctx.app.domain,
     ctx.app.nginxLocation,
@@ -33,19 +33,28 @@ async function checkNginxConflict(ctx: StepContext): Promise<void> {
 
   if (!conflict) return;
 
+  // Existing "location /" catch-all on the same domain — nginx will still route
+  // more-specific locations correctly, so warn and let the deploy proceed.
+  if (conflict.isCatchAll) {
+    ctx.logger.warn(
+      { domain: ctx.app.domain, file: conflict.file },
+      `nginx: "${conflict.file}" has a "location /" catch-all for ${ctx.app.domain} — ` +
+      `verify that nginx priority routes "${ctx.app.nginxLocation}" correctly after deploy`,
+    );
+    return;
+  }
+
   if (conflict.ownedByDeployer) {
-    // Another deployer app claims this domain+location — DB check should have
-    // caught this already, but guard here too in case of data inconsistency.
     throw new Error(
-      `nginx conflict: domain "${ctx.app.domain}" location "${ctx.app.nginxLocation}" ` +
-      `is already configured for deployer app "${conflict.ownerAppName}" (file: ${conflict.file})`,
+      `nginx conflict: ${ctx.app.domain}${ctx.app.nginxLocation} is already ` +
+      `configured for deployer app "${conflict.ownerAppName}" (${conflict.file})`,
     );
   }
 
   throw new Error(
-    `nginx conflict: domain "${ctx.app.domain}" location "${ctx.app.nginxLocation}" ` +
-    `is already claimed by an external nginx config (file: ${conflict.file}). ` +
-    `Remove or update that config before deploying this app.`,
+    `nginx conflict: ${ctx.app.domain}${ctx.app.nginxLocation} is already claimed ` +
+    `by an external nginx config (${conflict.file}). ` +
+    `Remove or update that config before deploying.`,
   );
 }
 
