@@ -9,10 +9,14 @@ import {
 } from '../schemas/app.schema.js';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
+import type { LastModifiedCache } from '../../cache/last-modified.cache.js';
 import { ConflictError } from '../../errors.js';
 
-export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config }) {
-  const svc = new AppService(opts.db, opts.config.envEncryptionKey);
+// HTTP dates have 1-second precision — truncate before comparing
+const truncSec = (d: Date) => Math.floor(d.getTime() / 1000);
+
+export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config; cache: LastModifiedCache }) {
+  const svc = new AppService(opts.db, opts.config.envEncryptionKey, opts.cache);
 
   // Guard: admin-only or scoped-to-app read
   function requireAdmin(request: typeof fastify extends { get: unknown } ? never : never) {
@@ -69,8 +73,17 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
     if (!request.isAdmin && request.scopedAppId !== appId) {
       return reply.code(403).send({ error: 'Forbidden' });
     }
+    // Preflight: check in-memory cache before hitting DB
+    const cached = opts.cache.get(`app:${appId}`);
+    const ims = request.headers['if-modified-since'];
+    if (cached && ims && truncSec(new Date(ims)) >= truncSec(cached)) {
+      return reply.code(304).send();
+    }
     const app = await svc.findById(appId);
     if (!app) return reply.code(404).send({ error: 'App not found' });
+    // Populate cache on cold start from DB timestamp
+    if (!cached) opts.cache.touch(`app:${appId}`, app.updatedAt);
+    reply.header('Last-Modified', (opts.cache.get(`app:${appId}`) ?? app.updatedAt).toUTCString());
     return app;
   });
 

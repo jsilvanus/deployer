@@ -3,6 +3,7 @@ import { eq, desc } from 'drizzle-orm';
 import { deployments, deploymentSnapshots } from '../db/schema.js';
 import type { Db } from '../db/client.js';
 import type { Deployment, DeploymentSnapshot, DeploymentOperation, TriggeredBy } from '../types/index.js';
+import type { LastModifiedCache } from '../cache/last-modified.cache.js';
 
 function rowToDeployment(row: typeof deployments.$inferSelect): Deployment {
   return {
@@ -35,13 +36,14 @@ function rowToSnapshot(row: typeof deploymentSnapshots.$inferSelect): Deployment
 }
 
 export class DeploymentService {
-  constructor(private db: Db) {}
+  constructor(private db: Db, private cache?: LastModifiedCache) {}
 
   async create(
     appId: string,
     operation: DeploymentOperation,
     triggeredBy: TriggeredBy,
   ): Promise<Deployment> {
+    const now = new Date();
     const [row] = await this.db
       .insert(deployments)
       .values({
@@ -51,10 +53,11 @@ export class DeploymentService {
         status:       'pending',
         triggeredBy,
         completedSteps: '[]',
-        createdAt:    new Date(),
+        createdAt:    now,
       })
       .returning();
     if (!row) throw new Error('Insert failed');
+    this.cache?.touch(`deployment:${row.id}`, now);
     return rowToDeployment(row);
   }
 
@@ -92,6 +95,7 @@ export class DeploymentService {
       .update(deployments)
       .set(set)
       .where(eq(deployments.id, id));
+    this.cache?.touch(`deployment:${id}`);
   }
 
   async hasRunningDeployment(appId: string): Promise<boolean> {

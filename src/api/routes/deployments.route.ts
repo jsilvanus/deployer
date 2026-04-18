@@ -7,6 +7,7 @@ import { deploymentIdParam, deployBody, migrateBody } from '../schemas/deploymen
 import { appIdParam } from '../schemas/app.schema.js';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
+import type { LastModifiedCache } from '../../cache/last-modified.cache.js';
 import { DEPLOY_LIMIT } from '../plugins/rate-limit.plugin.js';
 import { deployNodePlan } from '../../core/plans/deploy-node.plan.js';
 import { updateNodePlan } from '../../core/plans/update-node.plan.js';
@@ -17,12 +18,14 @@ import { updateComposePlan } from '../../core/plans/update-compose.plan.js';
 import { deployPythonPlan } from '../../core/plans/deploy-python.plan.js';
 import { updatePythonPlan } from '../../core/plans/update-python.plan.js';
 
+const truncSec = (d: Date) => Math.floor(d.getTime() / 1000);
+
 export async function deploymentsRoutes(
   fastify: FastifyInstance,
-  opts: { db: Db; config: Config },
+  opts: { db: Db; config: Config; cache: LastModifiedCache },
 ) {
-  const deploymentSvc = new DeploymentService(opts.db);
-  const appSvc = new AppService(opts.db, opts.config.envEncryptionKey);
+  const deploymentSvc = new DeploymentService(opts.db, opts.cache);
+  const appSvc = new AppService(opts.db, opts.config.envEncryptionKey, opts.cache);
   const orchestrator = new DeploymentOrchestrator(
     deploymentSvc,
     fastify.log,
@@ -34,11 +37,21 @@ export async function deploymentsRoutes(
     schema: { params: deploymentIdParam },
   }, async (request, reply) => {
     const { deploymentId } = request.params as { deploymentId: string };
+    // Preflight: if cache is warm and client is up-to-date, skip DB entirely.
+    // A valid If-Modified-Since implies the client received a prior 200 (and was authorized).
+    const cached = opts.cache.get(`deployment:${deploymentId}`);
+    const ims = request.headers['if-modified-since'];
+    if (cached && ims && truncSec(new Date(ims)) >= truncSec(cached)) {
+      return reply.code(304).send();
+    }
     const deployment = await deploymentSvc.findById(deploymentId);
     if (!deployment) return reply.code(404).send({ error: 'Deployment not found' });
     if (!request.isAdmin && request.scopedAppId !== deployment.appId) {
       return reply.code(403).send({ error: 'Forbidden' });
     }
+    // Populate cache on cold start; use finishedAt for terminal deployments
+    if (!cached) opts.cache.touch(`deployment:${deploymentId}`, deployment.finishedAt ?? deployment.createdAt);
+    reply.header('Last-Modified', (opts.cache.get(`deployment:${deploymentId}`) ?? deployment.createdAt).toUTCString());
     return deployment;
   });
 

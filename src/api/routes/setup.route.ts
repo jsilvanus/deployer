@@ -13,13 +13,14 @@ import { updateComposePlan } from '../../core/plans/update-compose.plan.js';
 import { updateDeployerPlan } from '../../core/plans/update-deployer.plan.js';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
+import type { LastModifiedCache } from '../../cache/last-modified.cache.js';
 
 const TRAEFIK_NAME = 'traefik';
 const DEFAULT_PORT = 8080;
 
-export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config }) {
-  const appSvc = new AppService(opts.db, opts.config.envEncryptionKey);
-  const deploymentSvc = new DeploymentService(opts.db);
+export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config; cache: LastModifiedCache }) {
+  const appSvc = new AppService(opts.db, opts.config.envEncryptionKey, opts.cache);
+  const deploymentSvc = new DeploymentService(opts.db, opts.cache);
   const orchestrator = new DeploymentOrchestrator(
     deploymentSvc,
     fastify.log,
