@@ -9,6 +9,7 @@ export const apps = sqliteTable('apps', {
   deployPath:     text('deploy_path').notNull(),
   dockerCompose:  integer('docker_compose', { mode: 'boolean' }).notNull().default(false),
   nginxEnabled:   integer('nginx_enabled', { mode: 'boolean' }).notNull().default(false),
+  nginxLocation:  text('nginx_location').notNull().default('/'),
   domain:         text('domain'),
   dbEnabled:      integer('db_enabled', { mode: 'boolean' }).notNull().default(false),
   dbType:         text('db_type').notNull().default('postgres'),

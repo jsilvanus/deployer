@@ -5,8 +5,10 @@ import { databaseCreateStep } from '../steps/database-create.step.js';
 import { migrationUpStep } from '../steps/migration-up.step.js';
 import { pm2StartStep } from '../steps/pm2-start.step.js';
 import { nginxConfigureStep } from '../steps/nginx-configure.step.js';
+import { preflightStep } from '../steps/preflight.step.js';
 
 export const deployNodePlan: DeploymentStep[] = [
+  preflightStep,
   gitCloneStep,
   envSetupStep,
   databaseCreateStep,

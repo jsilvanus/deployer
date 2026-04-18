@@ -26,10 +26,16 @@ export const nginxConfigureStep: DeploymentStep = {
     if (!ctx.app.nginxEnabled || !ctx.app.domain) return;
     const nginx = new NginxService(ctx.logger);
     const port = ctx.app.port ?? 3000;
+    const ssl = await nginx.detectSsl(ctx.app.domain);
+    if (ssl) {
+      ctx.logger.info({ appName: ctx.app.name, domain: ctx.app.domain }, 'SSL certificate found — using HTTPS config');
+    }
     const config = nginx.generateBlock({
       appName: ctx.app.name,
       domain: ctx.app.domain,
       upstreamPort: port,
+      location: ctx.app.nginxLocation,
+      ssl,
     });
     await nginx.write(ctx.app.name, config);
   },

@@ -9,6 +9,7 @@ import {
 } from '../schemas/app.schema.js';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
+import { ConflictError } from '../../errors.js';
 
 export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config }) {
   const svc = new AppService(opts.db, opts.config.envEncryptionKey);
@@ -31,8 +32,8 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
     const body = request.body as {
       name: string; type: 'node' | 'docker'; repoUrl: string;
       branch?: string; deployPath: string; dockerCompose?: boolean;
-      nginxEnabled?: boolean; domain?: string; dbEnabled?: boolean; dbName?: string;
-      port?: number;
+      nginxEnabled?: boolean; nginxLocation?: string; domain?: string;
+      dbEnabled?: boolean; dbName?: string; port?: number;
     };
 
     const allowedPaths = opts.config.allowedDeployPaths.split(',').map(p => resolve(p.trim()));
@@ -44,8 +45,13 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
       });
     }
 
-    const result = await svc.create(body);
-    return reply.code(201).send(result);
+    try {
+      const result = await svc.create(body);
+      return reply.code(201).send(result);
+    } catch (err) {
+      if (err instanceof ConflictError) return reply.code(409).send({ error: err.message });
+      throw err;
+    }
   });
 
   fastify.get('/apps/:appId', {
@@ -66,10 +72,16 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
     if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
     const { appId } = request.params as { appId: string };
     const body = request.body as {
-      branch?: string; domain?: string; nginxEnabled?: boolean;
+      branch?: string; domain?: string; nginxEnabled?: boolean; nginxLocation?: string;
       dbEnabled?: boolean; dbName?: string;
     };
-    const app = await svc.update(appId, body);
+    let app;
+    try {
+      app = await svc.update(appId, body);
+    } catch (err) {
+      if (err instanceof ConflictError) return reply.code(409).send({ error: err.message });
+      throw err;
+    }
     if (!app) return reply.code(404).send({ error: 'App not found' });
     return app;
   });

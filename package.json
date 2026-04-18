@@ -4,6 +4,9 @@
   "description": "API and MCP server for reversible, authenticated app deployment",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "deployer-setup": "bin/setup.js"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.build.json",

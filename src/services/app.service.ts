@@ -1,11 +1,12 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { randomUUID } from 'node:crypto';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, ne } from 'drizzle-orm';
 import { apps, deployments } from '../db/schema.js';
 import type { Db } from '../db/client.js';
 import type { App, CreateAppInput, UpdateAppInput, CreateAppResult } from '../types/index.js';
 import type { Deployment } from '../types/index.js';
 import { AppEnvService } from './app-env.service.js';
+import { ConflictError } from '../errors.js';
 
 function rowToApp(row: typeof apps.$inferSelect): App {
   return {
@@ -17,6 +18,7 @@ function rowToApp(row: typeof apps.$inferSelect): App {
     deployPath:    row.deployPath,
     dockerCompose: row.dockerCompose,
     nginxEnabled:  row.nginxEnabled,
+    nginxLocation: row.nginxLocation,
     dbEnabled:     row.dbEnabled,
     dbType:        (row.dbType ?? 'postgres') as App['dbType'],
     apiKeyPrefix:  row.apiKeyPrefix,
@@ -49,6 +51,9 @@ export class AppService {
   constructor(private db: Db, private encryptionKeyHex: string) {}
 
   async create(input: CreateAppInput): Promise<CreateAppResult> {
+    await this.assertNginxUnique(input.domain, input.nginxLocation ?? '/', input.nginxEnabled ?? false, null);
+    await this.assertPortUnique(input.port, null);
+
     const apiKey = randomBytes(32).toString('hex');
     const apiKeyHash = createHash('sha256').update(apiKey).digest('hex');
     const apiKeyPrefix = apiKey.slice(0, 8);
@@ -65,6 +70,7 @@ export class AppService {
         deployPath:    input.deployPath,
         dockerCompose: input.dockerCompose ?? false,
         nginxEnabled:  input.nginxEnabled ?? false,
+        nginxLocation: input.nginxLocation ?? '/',
         domain:        input.domain,
         dbEnabled:     input.dbEnabled ?? false,
         dbType:        input.dbType ?? 'postgres',
@@ -123,6 +129,14 @@ export class AppService {
   }
 
   async update(id: string, input: UpdateAppInput): Promise<App | null> {
+    const existing = await this.findById(id);
+    if (!existing) return null;
+
+    const domain       = input.domain       ?? existing.domain;
+    const nginxEnabled = input.nginxEnabled ?? existing.nginxEnabled;
+    const location     = input.nginxLocation ?? existing.nginxLocation;
+    await this.assertNginxUnique(domain, location, nginxEnabled, id);
+
     const [row] = await this.db
       .update(apps)
       .set({ ...input, updatedAt: new Date() })
@@ -155,5 +169,46 @@ export class AppService {
       .orderBy(desc(deployments.createdAt))
       .limit(limit);
     return rows.map(rowToDeployment);
+  }
+
+  private async assertNginxUnique(
+    domain: string | undefined,
+    location: string,
+    nginxEnabled: boolean,
+    excludeId: string | null,
+  ): Promise<void> {
+    if (!nginxEnabled || !domain) return;
+    const conditions = [
+      eq(apps.domain, domain),
+      eq(apps.nginxLocation, location),
+      eq(apps.nginxEnabled, true),
+    ];
+    if (excludeId) conditions.push(ne(apps.id, excludeId));
+    const [conflict] = await this.db
+      .select({ name: apps.name })
+      .from(apps)
+      .where(and(...conditions))
+      .limit(1);
+    if (conflict) {
+      throw new ConflictError(
+        `Domain "${domain}" with location "${location}" is already used by app "${conflict.name}"`,
+      );
+    }
+  }
+
+  private async assertPortUnique(port: number | undefined, excludeId: string | null): Promise<void> {
+    if (port == null) return;
+    const conditions = [eq(apps.port, port)];
+    if (excludeId) conditions.push(ne(apps.id, excludeId));
+    const [conflict] = await this.db
+      .select({ name: apps.name })
+      .from(apps)
+      .where(and(...conditions))
+      .limit(1);
+    if (conflict) {
+      throw new ConflictError(
+        `Port ${port} is already assigned to app "${conflict.name}"`,
+      );
+    }
   }
 }
