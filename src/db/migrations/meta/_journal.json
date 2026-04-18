@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1776436942167,
+      "tag": "0000_glamorous_blur",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1776452688219,
+      "tag": "0001_previous_meggan",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1776463003221,
+      "tag": "0002_cold_violations",
+      "breakpoints": true
+    }
+  ]
+}

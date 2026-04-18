@@ -1,0 +1,152 @@
+import { randomBytes, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { eq, desc } from 'drizzle-orm';
+import { apps, deployments } from '../db/schema.js';
+import type { Db } from '../db/client.js';
+import type { App, CreateAppInput, UpdateAppInput, CreateAppResult } from '../types/index.js';
+import type { Deployment } from '../types/index.js';
+import { AppEnvService } from './app-env.service.js';
+
+function rowToApp(row: typeof apps.$inferSelect): App {
+  return {
+    id:            row.id,
+    name:          row.name,
+    type:          row.type as App['type'],
+    repoUrl:       row.repoUrl,
+    branch:        row.branch,
+    deployPath:    row.deployPath,
+    dockerCompose: row.dockerCompose,
+    nginxEnabled:  row.nginxEnabled,
+    dbEnabled:     row.dbEnabled,
+    apiKeyPrefix:  row.apiKeyPrefix,
+    createdAt:     row.createdAt,
+    updatedAt:     row.updatedAt,
+    ...(row.domain != null ? { domain: row.domain } : {}),
+    ...(row.dbName != null ? { dbName: row.dbName } : {}),
+    ...(row.port   != null ? { port:   row.port   } : {}),
+  };
+}
+
+function rowToDeployment(row: typeof deployments.$inferSelect): Deployment {
+  return {
+    id:             row.id,
+    appId:          row.appId,
+    operation:      row.operation as Deployment['operation'],
+    status:         row.status as Deployment['status'],
+    triggeredBy:    row.triggeredBy as Deployment['triggeredBy'],
+    completedSteps: JSON.parse(row.completedSteps) as string[],
+    createdAt:      row.createdAt,
+    ...(row.gitCommitBefore != null ? { gitCommitBefore: row.gitCommitBefore } : {}),
+    ...(row.gitCommitAfter  != null ? { gitCommitAfter:  row.gitCommitAfter  } : {}),
+    ...(row.errorMessage    != null ? { errorMessage:    row.errorMessage    } : {}),
+    ...(row.currentStep     != null ? { currentStep:     row.currentStep     } : {}),
+    ...(row.finishedAt      != null ? { finishedAt:      row.finishedAt      } : {}),
+  };
+}
+
+export class AppService {
+  constructor(private db: Db, private encryptionKeyHex: string) {}
+
+  async create(input: CreateAppInput): Promise<CreateAppResult> {
+    const apiKey = randomBytes(32).toString('hex');
+    const apiKeyHash = createHash('sha256').update(apiKey).digest('hex');
+    const apiKeyPrefix = apiKey.slice(0, 8);
+    const now = new Date();
+
+    const [row] = await this.db
+      .insert(apps)
+      .values({
+        id:            randomUUID(),
+        name:          input.name,
+        type:          input.type,
+        repoUrl:       input.repoUrl,
+        branch:        input.branch ?? 'main',
+        deployPath:    input.deployPath,
+        dockerCompose: input.dockerCompose ?? false,
+        nginxEnabled:  input.nginxEnabled ?? false,
+        domain:        input.domain,
+        dbEnabled:     input.dbEnabled ?? false,
+        dbName:        input.dbName,
+        port:          input.port,
+        apiKeyHash,
+        apiKeyPrefix,
+        createdAt:     now,
+        updatedAt:     now,
+      })
+      .returning();
+
+    if (!row) throw new Error('Insert failed');
+
+    const app = rowToApp(row);
+    const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
+
+    // Auto-generate a dedicated DB password and DATABASE_URL when dbEnabled
+    let generatedDbPassword: string | undefined;
+    if (input.dbEnabled) {
+      const dbName = input.dbName ?? input.name;
+      generatedDbPassword = randomBytes(16).toString('hex');
+      await envSvc.set(app.id, 'DB_PASSWORD', generatedDbPassword);
+      await envSvc.set(
+        app.id,
+        'DATABASE_URL',
+        `postgres://${dbName}:${generatedDbPassword}@localhost/${dbName}`,
+      );
+    }
+
+    return {
+      app,
+      apiKey,
+      ...(generatedDbPassword !== undefined ? { generatedDbPassword } : {}),
+    };
+  }
+
+  async findById(id: string): Promise<App | null> {
+    const [row] = await this.db.select().from(apps).where(eq(apps.id, id)).limit(1);
+    return row ? rowToApp(row) : null;
+  }
+
+  async findByName(name: string): Promise<App | null> {
+    const [row] = await this.db.select().from(apps).where(eq(apps.name, name)).limit(1);
+    return row ? rowToApp(row) : null;
+  }
+
+  async list(): Promise<App[]> {
+    const rows = await this.db.select().from(apps);
+    return rows.map(rowToApp);
+  }
+
+  async update(id: string, input: UpdateAppInput): Promise<App | null> {
+    const [row] = await this.db
+      .update(apps)
+      .set({ ...input, updatedAt: new Date() })
+      .where(eq(apps.id, id))
+      .returning();
+    return row ? rowToApp(row) : null;
+  }
+
+  async delete(id: string): Promise<void> {
+    // Clean up stored env vars too
+    const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
+    await envSvc.deleteAll(id);
+    await this.db.delete(apps).where(eq(apps.id, id));
+  }
+
+  async listDeployments(appId: string, limit = 20): Promise<Deployment[]> {
+    const rows = await this.db
+      .select()
+      .from(deployments)
+      .where(eq(deployments.appId, appId))
+      .orderBy(desc(deployments.createdAt))
+      .limit(limit);
+    return rows.map(rowToDeployment);
+  }
+
+  async listAllDeployments(limit = 20): Promise<Deployment[]> {
+    const rows = await this.db
+      .select()
+      .from(deployments)
+      .orderBy(desc(deployments.createdAt))
+      .limit(limit);
+    return rows.map(rowToDeployment);
+  }
+}
