@@ -15,6 +15,9 @@ export interface App {
   dbEnabled: boolean;
   dbType: DbType;
   dbName?: string;
+  pgHost?: string;
+  pgPort?: number;
+  pgAdminUser?: string;
   apiKeyPrefix: string;
   port?: number;
   createdAt: Date;
@@ -34,6 +37,10 @@ export interface CreateAppInput {
   dbEnabled?: boolean;
   dbType?: DbType;
   dbName?: string;
+  pgHost?: string;
+  pgPort?: number;
+  pgAdminUser?: string;
+  pgAdminPassword?: string;
   port?: number;
 }
 
@@ -45,6 +52,10 @@ export interface UpdateAppInput {
   dbEnabled?: boolean;
   dbType?: DbType;
   dbName?: string;
+  pgHost?: string;
+  pgPort?: number;
+  pgAdminUser?: string;
+  pgAdminPassword?: string;
 }
 
 export interface CreateAppResult {

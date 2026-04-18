@@ -1,21 +1,27 @@
 import { execa } from 'execa';
 import type { AnyLogger } from '../types/logger.js';
-import type { Config } from '../config.js';
 
-type PgConfig = Pick<Config, 'pgHost' | 'pgPort' | 'pgUser' | 'pgPassword'>;
+export interface PgConnection {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+}
+
+const DEFAULT_PG: PgConnection = { host: 'localhost', port: 5432, user: 'postgres', password: '' };
 
 export class DatabaseService {
   constructor(
     private logger: AnyLogger,
-    private pg: PgConfig = { pgHost: 'localhost', pgPort: 5432, pgUser: 'postgres', pgPassword: '' },
+    private pg: PgConnection = DEFAULT_PG,
   ) {}
 
   private args(): string[] {
-    return ['-h', this.pg.pgHost, '-p', String(this.pg.pgPort), '-U', this.pg.pgUser];
+    return ['-h', this.pg.host, '-p', String(this.pg.port), '-U', this.pg.user];
   }
 
   private env(): Record<string, string> {
-    return { ...(process.env as Record<string, string>), PGPASSWORD: this.pg.pgPassword };
+    return { ...(process.env as Record<string, string>), PGPASSWORD: this.pg.password };
   }
 
   private async psql(sql: string): Promise<string> {

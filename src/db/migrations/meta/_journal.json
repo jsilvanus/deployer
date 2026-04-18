@@ -29,6 +29,20 @@
       "when": 1776500000000,
       "tag": "0003_add_db_type",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1776510000000,
+      "tag": "0004_nginx_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1776520000000,
+      "tag": "0005_pg_connection",
+      "breakpoints": true
     }
   ]
 }
