@@ -43,6 +43,13 @@
       "when": 1776520000000,
       "tag": "0005_pg_connection",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1776530000000,
+      "tag": "0006_primary_service",
+      "breakpoints": true
     }
   ]
 }

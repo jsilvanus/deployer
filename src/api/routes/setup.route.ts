@@ -80,6 +80,11 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
       return reply.code(409).send({ error: 'A Traefik deployment is already running' });
     }
 
+    // Persist mode so docker-compose-up step can read it when building app overrides
+    const { AppEnvService } = await import('../../services/app-env.service.js');
+    const envSvc = new AppEnvService(opts.db, opts.config.envEncryptionKey);
+    await envSvc.set(app.id, '_TRAEFIK_MODE', mode);
+
     const plan = isNew ? deployComposePlan : updateComposePlan;
     const deployment = await deploymentSvc.create(app.id, isNew ? 'deploy' : 'update', 'api');
 

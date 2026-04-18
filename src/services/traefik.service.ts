@@ -38,6 +38,37 @@ export class TraefikService {
     ].join('\n');
   }
 
+  generateAppOverride(opts: {
+    appName: string;
+    primaryService: string;
+    domain: string;
+    port: number;
+    mode: TraefikMode;
+  }): string {
+    const { appName, primaryService, domain, port, mode } = opts;
+    const labels = [
+      `      - traefik.enable=true`,
+      `      - traefik.http.routers.${appName}.rule=Host(\`${domain}\`)`,
+      `      - traefik.http.routers.${appName}.entrypoints=${mode === 'standalone' ? 'websecure' : 'web'}`,
+      ...(mode === 'standalone'
+        ? [`      - traefik.http.routers.${appName}.tls.certresolver=letsencrypt`]
+        : []),
+      `      - traefik.http.services.${appName}.loadbalancer.server.port=${port}`,
+    ].join('\n');
+
+    return `services:
+  ${primaryService}:
+    labels:
+${labels}
+    networks:
+      - traefik
+
+networks:
+  traefik:
+    external: true
+`;
+  }
+
   private standaloneCompose(acmeEmail: string): string {
     return `services:
   traefik:

@@ -17,6 +17,7 @@ export const apps = sqliteTable('apps', {
   pgHost:         text('pg_host'),
   pgPort:         integer('pg_port'),
   pgAdminUser:    text('pg_admin_user'),
+  primaryService: text('primary_service'),
   apiKeyHash:     text('api_key_hash').notNull(),
   apiKeyPrefix:   text('api_key_prefix').notNull(),
   port:           integer('port'),

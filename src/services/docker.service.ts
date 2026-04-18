@@ -48,9 +48,13 @@ export class DockerService {
     }
   }
 
-  async composeUp(composePath: string, envFile?: string): Promise<void> {
+  async composeUp(composePath: string, envFile?: string, overrideFiles: string[] = []): Promise<void> {
     this.logger.info({ composePath }, 'docker compose up');
-    const args = ['compose', 'up', '-d', '--build'];
+    const args = ['compose'];
+    if (overrideFiles.length > 0) {
+      args.push('-f', 'docker-compose.yml', ...overrideFiles.flatMap(f => ['-f', f]));
+    }
+    args.push('up', '-d', '--build');
     if (envFile) args.push('--env-file', envFile);
     await execa('docker', args, { cwd: composePath });
   }

@@ -32,7 +32,8 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
     const body = request.body as {
       name: string; type: 'node' | 'docker' | 'compose'; repoUrl?: string;
       branch?: string; deployPath: string; composeContent?: string;
-      dockerCompose?: boolean; nginxEnabled?: boolean; nginxLocation?: string;
+      primaryService?: string; dockerCompose?: boolean;
+      nginxEnabled?: boolean; nginxLocation?: string;
       domain?: string; dbEnabled?: boolean; dbName?: string; port?: number;
     };
 
@@ -79,7 +80,7 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
     if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
     const { appId } = request.params as { appId: string };
     const body = request.body as {
-      composeContent?: string; branch?: string; domain?: string;
+      composeContent?: string; primaryService?: string; branch?: string; domain?: string;
       nginxEnabled?: boolean; nginxLocation?: string; dbEnabled?: boolean; dbName?: string;
     };
     let app;

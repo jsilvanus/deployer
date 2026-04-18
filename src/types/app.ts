@@ -18,6 +18,7 @@ export interface App {
   pgHost?: string;
   pgPort?: number;
   pgAdminUser?: string;
+  primaryService?: string;
   apiKeyPrefix: string;
   port?: number;
   createdAt: Date;
@@ -42,6 +43,7 @@ export interface CreateAppInput {
   pgPort?: number;
   pgAdminUser?: string;
   pgAdminPassword?: string;
+  primaryService?: string;
   port?: number;
 }
 
@@ -58,6 +60,7 @@ export interface UpdateAppInput {
   pgPort?: number;
   pgAdminUser?: string;
   pgAdminPassword?: string;
+  primaryService?: string;
 }
 
 export interface CreateAppResult {
