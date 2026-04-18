@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { execa } from 'execa';
 import type { FastifyInstance } from 'fastify';
+import { SETUP_LIMIT } from '../plugins/rate-limit.plugin.js';
 import { AppService } from '../../services/app.service.js';
 import { DeploymentService } from '../../services/deployment.service.js';
 import { DeploymentOrchestrator } from '../../core/orchestrator.js';
@@ -27,6 +28,7 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
   );
 
   fastify.post('/setup/traefik', {
+    config: { rateLimit: SETUP_LIMIT },
     schema: {
       body: {
         type: 'object',
@@ -129,6 +131,7 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
   // ── Self-registration ──────────────────────────────────────────────────────
 
   fastify.post('/setup/self-register', {
+    config: { rateLimit: SETUP_LIMIT },
     schema: {
       body: {
         type: 'object',
@@ -184,6 +187,7 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
   // ── Self-update ────────────────────────────────────────────────────────────
 
   fastify.post('/setup/self-update', {
+    config: { rateLimit: SETUP_LIMIT },
     schema: {
       body: {
         type: 'object',

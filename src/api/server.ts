@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import type { Server, IncomingMessage, ServerResponse } from 'node:http';
 import authPlugin from './plugins/auth.plugin.js';
 import errorHandlerPlugin from './plugins/error-handler.plugin.js';
+import rateLimitPlugin from './plugins/rate-limit.plugin.js';
 import { healthRoutes } from './routes/health.route.js';
 import { appsRoutes } from './routes/apps.route.js';
 import { deploymentsRoutes } from './routes/deployments.route.js';
@@ -23,6 +24,7 @@ export async function createServer(config: Config, db: Db): Promise<FastifyInsta
   const fastify = Fastify<Server, IncomingMessage, ServerResponse>({ logger: loggerOpts });
 
   await fastify.register(errorHandlerPlugin);
+  await fastify.register(rateLimitPlugin);
   await fastify.register(authPlugin, { config, db });
   await fastify.register(healthRoutes);
   await fastify.register(appsRoutes, { db, config });

@@ -7,6 +7,7 @@ import { deploymentIdParam, deployBody, migrateBody } from '../schemas/deploymen
 import { appIdParam } from '../schemas/app.schema.js';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
+import { DEPLOY_LIMIT } from '../plugins/rate-limit.plugin.js';
 import { deployNodePlan } from '../../core/plans/deploy-node.plan.js';
 import { updateNodePlan } from '../../core/plans/update-node.plan.js';
 import { deployDockerPlan } from '../../core/plans/deploy-docker.plan.js';
@@ -55,6 +56,7 @@ export async function deploymentsRoutes(
 
   fastify.post('/apps/:appId/deploy', {
     schema: { params: appIdParam, body: deployBody },
+    config: { rateLimit: DEPLOY_LIMIT },
   }, async (request, reply) => {
     const { appId } = request.params as { appId: string };
     if (!request.isAdmin && request.scopedAppId !== appId) {
@@ -96,6 +98,7 @@ export async function deploymentsRoutes(
 
   fastify.post('/apps/:appId/update', {
     schema: { params: appIdParam, body: deployBody },
+    config: { rateLimit: DEPLOY_LIMIT },
   }, async (request, reply) => {
     const { appId } = request.params as { appId: string };
     if (!request.isAdmin && request.scopedAppId !== appId) {
@@ -137,6 +140,7 @@ export async function deploymentsRoutes(
 
   fastify.post('/deployments/:deploymentId/rollback', {
     schema: { params: deploymentIdParam },
+    config: { rateLimit: DEPLOY_LIMIT },
   }, async (request, reply) => {
     const { deploymentId } = request.params as { deploymentId: string };
     const target = await deploymentSvc.findById(deploymentId);
@@ -169,6 +173,7 @@ export async function deploymentsRoutes(
 
   fastify.post('/apps/:appId/rollback', {
     schema: { params: appIdParam },
+    config: { rateLimit: DEPLOY_LIMIT },
   }, async (request, reply) => {
     const { appId } = request.params as { appId: string };
     if (!request.isAdmin && request.scopedAppId !== appId) {
@@ -198,6 +203,7 @@ export async function deploymentsRoutes(
 
   fastify.post('/apps/:appId/migrations/run', {
     schema: { params: appIdParam, body: migrateBody },
+    config: { rateLimit: DEPLOY_LIMIT },
   }, async (request, reply) => {
     const { appId } = request.params as { appId: string };
     if (!request.isAdmin && request.scopedAppId !== appId) {
