@@ -9,6 +9,7 @@ import {
 } from '../schemas/app.schema.js';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
+import { ConflictError } from '../../errors.js';
 
 export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config }) {
   const svc = new AppService(opts.db, opts.config.envEncryptionKey);
@@ -44,8 +45,13 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
       });
     }
 
-    const result = await svc.create(body);
-    return reply.code(201).send(result);
+    try {
+      const result = await svc.create(body);
+      return reply.code(201).send(result);
+    } catch (err) {
+      if (err instanceof ConflictError) return reply.code(409).send({ error: err.message });
+      throw err;
+    }
   });
 
   fastify.get('/apps/:appId', {
@@ -69,7 +75,13 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
       branch?: string; domain?: string; nginxEnabled?: boolean; nginxLocation?: string;
       dbEnabled?: boolean; dbName?: string;
     };
-    const app = await svc.update(appId, body);
+    let app;
+    try {
+      app = await svc.update(appId, body);
+    } catch (err) {
+      if (err instanceof ConflictError) return reply.code(409).send({ error: err.message });
+      throw err;
+    }
     if (!app) return reply.code(404).send({ error: 'App not found' });
     return app;
   });

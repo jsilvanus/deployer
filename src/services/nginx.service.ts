@@ -1,6 +1,10 @@
-import { access } from 'node:fs/promises';
+import { access, readdir, readFile } from 'node:fs/promises';
 import { execa } from 'execa';
 import type { AnyLogger } from '../types/logger.js';
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 const SITES_AVAILABLE = '/etc/nginx/sites-available';
 const SITES_ENABLED = '/etc/nginx/sites-enabled';
@@ -8,6 +12,10 @@ const SITES_ENABLED = '/etc/nginx/sites-enabled';
 const LE_BASE = '/etc/letsencrypt/live';
 const LE_OPTIONS_CONF = '/etc/letsencrypt/options-ssl-nginx.conf';
 const LE_DHPARAM = '/etc/letsencrypt/ssl-dhparams.pem';
+
+// First line added to every deployer-generated nginx config.
+// Used by findExternalConflict to distinguish deployer configs from others.
+const DEPLOYER_MARKER = '# deployer-managed';
 
 export type SslConfig = {
   certPath: string;
@@ -60,6 +68,44 @@ export class NginxService {
     };
   }
 
+  // Scans /etc/nginx/sites-enabled for any config that already claims
+  // domain+location. Returns null if clear, or a conflict descriptor.
+  // Pass ownAppName to treat that app's own existing config as non-conflicting.
+  async findExternalConflict(
+    domain: string,
+    location: string,
+    ownAppName: string,
+  ): Promise<{ file: string; ownedByDeployer: boolean; ownerAppName: string | null } | null> {
+    let entries: string[];
+    try {
+      entries = await readdir(SITES_ENABLED);
+    } catch {
+      return null; // directory unreadable — skip check
+    }
+
+    const domainRe   = new RegExp(`\\bserver_name\\s+${escapeRe(domain)}\\s*;`);
+    const locationRe = new RegExp(`\\blocation\\s+${escapeRe(location)}\\s*\\{`);
+
+    for (const entry of entries) {
+      let content: string;
+      try {
+        content = await readFile(`${SITES_ENABLED}/${entry}`, 'utf8');
+      } catch {
+        continue;
+      }
+      if (!domainRe.test(content) || !locationRe.test(content)) continue;
+
+      // This file claims domain+location — inspect ownership
+      const markerMatch = content.match(new RegExp(`^${escapeRe(DEPLOYER_MARKER)}:\\s*(\\S+)`, 'm'));
+      const ownerAppName = markerMatch?.[1] ?? null;
+
+      if (ownerAppName === ownAppName) continue; // our own existing config
+
+      return { file: entry, ownedByDeployer: ownerAppName !== null, ownerAppName };
+    }
+    return null;
+  }
+
   generateBlock(opts: {
     appName: string;
     domain: string;
@@ -82,8 +128,11 @@ export class NginxService {
       `    }`,
     ].join('\n');
 
+    const marker = `${DEPLOYER_MARKER}: ${opts.appName}`;
+
     if (!opts.ssl) {
       return [
+        marker,
         `server {`,
         `    listen 80;`,
         `    server_name ${opts.domain};`,
@@ -102,6 +151,7 @@ export class NginxService {
     ].join('\n');
 
     return [
+      marker,
       `server {`,
       `    listen 80;`,
       `    server_name ${opts.domain};`,
