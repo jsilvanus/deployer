@@ -36,6 +36,8 @@ async function buildInternalOverride(
   ctx: StepContext,
   docker: DockerService,
 ): Promise<string | null> {
+  await docker.networkCreate('deployer-internal');
+
   let serviceNames: string[];
   try {
     serviceNames = await docker.composeServiceNames(ctx.app.deployPath);
@@ -76,7 +78,7 @@ export const dockerComposeUpStep: DeploymentStep = {
     const envFile = join(ctx.app.deployPath, '.env');
     const overrideFiles: string[] = [];
 
-    if (ctx.app.type === 'docker') {
+    if (ctx.app.type === 'docker' || ctx.app.type === 'compose') {
       const traefik = await buildTraefikOverride(ctx);
       if (traefik) overrideFiles.push(traefik);
     }

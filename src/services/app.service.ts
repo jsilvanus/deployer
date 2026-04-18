@@ -84,7 +84,9 @@ export class AppService {
         pgPort:         input.pgPort,
         pgAdminUser:    input.pgAdminUser,
         primaryService:  input.primaryService,
-        internalNetwork: input.internalNetwork ?? true,
+        internalNetwork: (input.type === 'node' || input.type === 'python')
+          ? false
+          : (input.internalNetwork ?? true),
         port:            input.port,
         apiKeyHash,
         apiKeyPrefix,
@@ -157,7 +159,11 @@ export class AppService {
     const location     = input.nginxLocation ?? existing.nginxLocation;
     await this.assertNginxUnique(domain, location, nginxEnabled, id);
 
-    const { pgAdminPassword, composeContent, ...dbFields } = input;
+    const { pgAdminPassword, composeContent, internalNetwork: rawInternalNetwork, ...otherDbFields } = input;
+    const isDockerApp = existing.type === 'docker' || existing.type === 'compose';
+    const dbFields = isDockerApp
+      ? { ...otherDbFields, internalNetwork: rawInternalNetwork }
+      : otherDbFields;
     const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
 
     if (pgAdminPassword) {

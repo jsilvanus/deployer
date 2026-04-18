@@ -89,4 +89,32 @@ export class DockerService {
       return null;
     }
   }
+
+  async composePsStatus(composePath: string): Promise<{
+    status: string;
+    services: Array<{ name: string; state: string }>;
+  }> {
+    try {
+      const { stdout } = await execa(
+        'docker', ['compose', 'ps', '--format', 'json'],
+        { cwd: composePath },
+      );
+      if (!stdout.trim()) return { status: 'not_found', services: [] };
+
+      type PsRow = { Name: string; State: string };
+      let rows: PsRow[];
+      try {
+        rows = JSON.parse(stdout) as PsRow[];
+      } catch {
+        rows = stdout.trim().split('\n').map(l => JSON.parse(l) as PsRow);
+      }
+      if (rows.length === 0) return { status: 'not_found', services: [] };
+
+      const allRunning = rows.every(r => r.State === 'running');
+      const status = allRunning ? 'running' : (rows.find(r => r.State !== 'running')?.State ?? 'unknown');
+      return { status, services: rows.map(r => ({ name: r.Name, state: r.State })) };
+    } catch {
+      return { status: 'not_found', services: [] };
+    }
+  }
 }

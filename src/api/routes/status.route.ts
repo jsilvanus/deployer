@@ -26,7 +26,7 @@ export async function statusRoutes(fastify: FastifyInstance, opts: { db: Db; con
       return {
         appId: app.id,
         appName: app.name,
-        type: 'node',
+        type: app.type,
         status: info?.status ?? 'not_found',
         pid: info?.pid ?? null,
         memory: info?.memory ?? null,
@@ -34,13 +34,13 @@ export async function statusRoutes(fastify: FastifyInstance, opts: { db: Db; con
         uptime: info?.uptime ?? null,
       };
     } else {
-      const containerName = app.name;
-      const containerStatus = await docker.containerStatus(containerName);
+      const ps = await docker.composePsStatus(app.deployPath);
       return {
         appId: app.id,
         appName: app.name,
-        type: 'docker',
-        status: containerStatus ?? 'not_found',
+        type: app.type,
+        status: ps.status,
+        services: ps.services,
       };
     }
   });
