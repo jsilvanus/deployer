@@ -10,6 +10,7 @@ import { dockerBuildStep } from './steps/docker-build.step.js';
 import { dockerComposeUpStep } from './steps/docker-compose-up.step.js';
 import { composeWriteStep } from './steps/compose-write.step.js';
 import { nginxConfigureStep } from './steps/nginx-configure.step.js';
+import { npmBuildStep } from './steps/npm-build.step.js';
 
 const steps: DeploymentStep[] = [
   gitCloneStep,
@@ -23,6 +24,7 @@ const steps: DeploymentStep[] = [
   dockerComposeUpStep,
   composeWriteStep,
   nginxConfigureStep,
+  npmBuildStep,
 ];
 
 export const stepRegistry = new Map<string, DeploymentStep>(

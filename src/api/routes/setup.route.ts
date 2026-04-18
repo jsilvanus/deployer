@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { execa } from 'execa';
 import type { FastifyInstance } from 'fastify';
 import { AppService } from '../../services/app.service.js';
 import { DeploymentService } from '../../services/deployment.service.js';
@@ -8,6 +9,7 @@ import { DockerService } from '../../services/docker.service.js';
 import { NginxService } from '../../services/nginx.service.js';
 import { deployComposePlan } from '../../core/plans/deploy-compose.plan.js';
 import { updateComposePlan } from '../../core/plans/update-compose.plan.js';
+import { updateDeployerPlan } from '../../core/plans/update-deployer.plan.js';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
 
@@ -121,6 +123,105 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
       mode,
       ...(nginxConfig !== undefined && !nginxWritten ? { nginxConfig } : {}),
       message: `Traefik ${isNew ? 'deployment' : 'update'} started (${mode})`,
+    });
+  });
+
+  // ── Self-registration ──────────────────────────────────────────────────────
+
+  fastify.post('/setup/self-register', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          name:       { type: 'string' },
+          repoUrl:    { type: 'string' },
+          branch:     { type: 'string' },
+          deployPath: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
+
+    const body = (request.body ?? {}) as {
+      name?: string;
+      repoUrl?: string;
+      branch?: string;
+      deployPath?: string;
+    };
+
+    const name       = body.name       ?? 'deployer';
+    const deployPath = resolve(body.deployPath ?? process.cwd());
+    const branch     = body.branch     ?? 'main';
+
+    const existing = await appSvc.findByName(name);
+    if (existing) {
+      return { app: existing, message: 'Already registered' };
+    }
+
+    // Auto-detect repoUrl from git remote if not provided
+    let repoUrl = body.repoUrl;
+    if (!repoUrl) {
+      try {
+        const { stdout } = await execa('git', ['remote', 'get-url', 'origin'], { cwd: deployPath });
+        repoUrl = stdout.trim();
+      } catch {
+        return reply.code(400).send({
+          error: 'Could not detect repo URL — provide repoUrl in the body or set the git remote',
+        });
+      }
+    }
+
+    const result = await appSvc.create({ name, type: 'node', repoUrl, branch, deployPath });
+    return reply.code(201).send({
+      app:     result.app,
+      apiKey:  result.apiKey,
+      message: 'Deployer self-registered successfully',
+    });
+  });
+
+  // ── Self-update ────────────────────────────────────────────────────────────
+
+  fastify.post('/setup/self-update', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
+
+    const body = (request.body ?? {}) as { name?: string };
+    const name = body.name ?? 'deployer';
+
+    const app = await appSvc.findByName(name);
+    if (!app) {
+      return reply.code(404).send({
+        error: `App "${name}" not found — call POST /setup/self-register first`,
+      });
+    }
+
+    if (await deploymentSvc.hasRunningDeployment(app.id)) {
+      return reply.code(409).send({ error: 'A deployment is already running for this app' });
+    }
+
+    const deployment = await deploymentSvc.create(app.id, 'update', 'api');
+
+    setImmediate(() => {
+      orchestrator.run(app, deployment.id, updateDeployerPlan, {}).catch((err: unknown) => {
+        fastify.log.error({ err, deploymentId: deployment.id }, 'Self-update failed');
+      });
+    });
+
+    return reply.code(202).send({
+      deploymentId: deployment.id,
+      status:       deployment.status,
+      message:      'Self-update started — deployer will restart after build completes',
     });
   });
 }
