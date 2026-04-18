@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execSync, spawnSync } from 'child_process';
-import { existsSync, writeFileSync, accessSync, constants, mkdirSync } from 'fs';
+import { existsSync, writeFileSync, chmodSync } from 'fs';
 import { randomBytes } from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
@@ -11,15 +11,15 @@ const ROOT = resolve(__dirname, '..');
 
 // ─── ANSI helpers ────────────────────────────────────────────────────────────
 const c = {
-  reset:  '\x1b[0m',
-  bold:   '\x1b[1m',
-  dim:    '\x1b[2m',
-  red:    '\x1b[31m',
-  green:  '\x1b[32m',
-  yellow: '\x1b[33m',
-  cyan:   '\x1b[36m',
-  white:  '\x1b[37m',
-  bgRed:  '\x1b[41m',
+  reset:    '\x1b[0m',
+  bold:     '\x1b[1m',
+  dim:      '\x1b[2m',
+  red:      '\x1b[31m',
+  green:    '\x1b[32m',
+  yellow:   '\x1b[33m',
+  cyan:     '\x1b[36m',
+  white:    '\x1b[37m',
+  bgRed:    '\x1b[41m',
   bgYellow: '\x1b[43m',
 };
 
@@ -42,6 +42,23 @@ function commandExists(cmd) {
   return run(`command -v ${cmd}`).status === 0;
 }
 
+// ─── Root check ──────────────────────────────────────────────────────────────
+// Must be before everything else — we need root to write sudoers and nginx configs.
+if (process.getuid?.() !== 0) {
+  const hint = process.argv.slice(2).join(' ');
+  console.error(`
+${c.bold}${c.bgRed}${c.white}  This script must be run with sudo  ${c.reset}
+
+  ${c.bold}sudo node bin/setup.js${hint ? ' ' + hint : ''}${c.reset}
+
+  Root is required to:
+    ${c.dim}•${c.reset} Write /etc/sudoers.d/deployer-nginx (nginx management rights)
+    ${c.dim}•${c.reset} Write nginx config to /etc/nginx/sites-available/
+    ${c.dim}•${c.reset} Reload nginx
+`);
+  process.exit(1);
+}
+
 // ─── Arg parsing ─────────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
 
@@ -50,14 +67,26 @@ function getArg(name) {
   return idx !== -1 && args[idx + 1] ? args[idx + 1] : null;
 }
 
-const domain  = getArg('--domain');
-const port    = parseInt(getArg('--port') || '3000', 10);
-const pm2Name = getArg('--pm2-name') || 'deployer';
+const domain      = getArg('--domain');
+const port        = parseInt(getArg('--port') || '3000', 10);
+const pm2Name     = getArg('--pm2-name') || 'deployer';
+const deployUser  = getArg('--user') || process.env.SUDO_USER || process.env.USER;
+
+if (!deployUser || deployUser === 'root') {
+  die(
+    'Could not determine the deploy user (got: ' + (deployUser || 'none') + ').\n' +
+    '  Pass --user <username> explicitly, e.g.:\n\n' +
+    '    sudo node bin/setup.js --user myuser'
+  );
+}
 
 // ─── Banner ──────────────────────────────────────────────────────────────────
 console.log();
 console.log(`${c.bold}${c.cyan}  Deployer Setup${c.reset}`);
 console.log(`${c.dim}  ──────────────────────────────────────${c.reset}`);
+info(`Deploy user:    ${c.bold}${deployUser}${c.reset}`);
+info(`Port:           ${c.bold}${port}${c.reset}`);
+info(`PM2 name:       ${c.bold}${pm2Name}${c.reset}`);
 if (domain) info(`Reverse proxy:  ${c.bold}${domain}${c.reset} → 127.0.0.1:${port}`);
 else        info(`No --domain given — skipping nginx vhost for deployer`);
 console.log();
@@ -78,8 +107,7 @@ if (nodeVer >= 20) {
 
 // git
 if (commandExists('git')) {
-  const v = run('git --version').stdout.trim();
-  ok(v);
+  ok(run('git --version').stdout.trim());
 } else {
   fail('git not found — install git first');
   preflightOk = false;
@@ -87,7 +115,7 @@ if (commandExists('git')) {
 
 // nginx
 if (commandExists('nginx')) {
-  const v = run('nginx -v 2>&1').stdout.trim() || run('nginx -v 2>&1').stderr.trim();
+  const v = run('nginx -v 2>&1').stderr.trim() || run('nginx -v 2>&1').stdout.trim();
   ok(v || 'nginx found');
 
   const nginxTest = run('nginx -t 2>&1');
@@ -102,48 +130,53 @@ if (commandExists('nginx')) {
   preflightOk = false;
 }
 
-// nginx write permission (needed for vhost OR managed apps)
-const nginxAvail = '/etc/nginx/sites-available';
-try {
-  accessSync(nginxAvail, constants.W_OK);
-  ok(`Write access to ${nginxAvail}`);
-} catch {
-  fail(`No write access to ${nginxAvail} — run as root or configure sudoers`);
+// visudo (needed to validate sudoers file)
+if (commandExists('visudo')) {
+  ok('visudo found');
+} else {
+  fail('visudo not found — install sudo package');
   preflightOk = false;
 }
 
 // PM2
 if (commandExists('pm2')) {
-  const v = run('pm2 -v').stdout.trim();
-  ok(`PM2 ${v}`);
+  ok(`PM2 ${run('pm2 -v').stdout.trim()}`);
 } else {
-  warn('PM2 not found — will install globally (npm install -g pm2)');
+  warn('PM2 not found — will install globally');
+}
+
+// Verify deploy user exists on the system
+const userCheck = run(`id ${deployUser} 2>&1`);
+if (userCheck.status === 0) {
+  ok(`User "${deployUser}" exists`);
+} else {
+  fail(`User "${deployUser}" not found on this system`);
+  preflightOk = false;
 }
 
 if (!preflightOk) {
   die('Preflight failed — fix the issues above and re-run.');
 }
 
-// ─── .env check ──────────────────────────────────────────────────────────────
+// ─── .env ────────────────────────────────────────────────────────────────────
 console.log();
 const envPath = resolve(ROOT, '.env');
+let skipEnv = false;
+
 if (existsSync(envPath)) {
   const answer = await ask(
     `  ${c.yellow}⚠${c.reset}  .env already exists. Overwrite? ${c.dim}(y/N)${c.reset} `
   );
   if (answer.toLowerCase() !== 'y') {
     info('Keeping existing .env — skipping secret generation.');
+    skipEnv = true;
     console.log();
-  } else {
-    generateEnv();
   }
-} else {
-  generateEnv();
 }
 
-function generateEnv() {
-  const adminToken     = randomBytes(32).toString('hex'); // 64 hex chars
-  const encryptionKey  = randomBytes(32).toString('hex'); // 64 hex chars
+if (!skipEnv) {
+  const adminToken    = randomBytes(32).toString('hex');
+  const encryptionKey = randomBytes(32).toString('hex');
 
   const env = [
     `DEPLOYER_PORT=${port}`,
@@ -168,28 +201,24 @@ function generateEnv() {
   ].join('\n');
 
   writeFileSync(envPath, env + '\n', { mode: 0o600 });
-  ok(`.env written (mode 600)`);
+  ok('.env written (mode 600)');
 
-  printAdminTokenWarning(adminToken);
-}
-
-function printAdminTokenWarning(token) {
-  const width = 64;
+  // ── Big admin token warning ──
+  const width  = 64;
   const border = '═'.repeat(width);
-  const pad = (s) => {
+  const pad    = (s) => {
     const space = width - s.length;
-    const left = Math.floor(space / 2);
-    const right = space - left;
-    return ' '.repeat(left) + s + ' '.repeat(right);
+    const left  = Math.floor(space / 2);
+    return ' '.repeat(left) + s + ' '.repeat(space - left);
   };
 
   console.log();
   console.log(`${c.bold}${c.bgRed}${c.white}╔${border}╗${c.reset}`);
   console.log(`${c.bold}${c.bgRed}${c.white}║${pad('! WRITE THIS DOWN — YOUR ADMIN API KEY !')}║${c.reset}`);
   console.log(`${c.bold}${c.bgRed}${c.white}╠${border}╣${c.reset}`);
-  console.log(`${c.bold}${c.bgRed}${c.white}║${pad(token)}║${c.reset}`);
+  console.log(`${c.bold}${c.bgRed}${c.white}║${pad(adminToken)}║${c.reset}`);
   console.log(`${c.bold}${c.bgRed}${c.white}╠${border}╣${c.reset}`);
-  console.log(`${c.bold}${c.bgRed}${c.white}║${pad('This key is also saved in .env (keep that file safe)')}║${c.reset}`);
+  console.log(`${c.bold}${c.bgRed}${c.white}║${pad('Also saved in .env — keep that file safe (mode 600)')}║${c.reset}`);
   console.log(`${c.bold}${c.bgRed}${c.white}╚${border}╝${c.reset}`);
   console.log();
 }
@@ -203,34 +232,76 @@ if (!commandExists('pm2')) {
   console.log();
 }
 
-// ─── Build deployer ──────────────────────────────────────────────────────────
+// ─── Build ───────────────────────────────────────────────────────────────────
 console.log(`${c.bold}  Building deployer${c.reset}`);
 
 info('npm install…');
-const install = run('npm install', { cwd: ROOT, stdio: 'inherit' });
-if (install.status !== 0) die('npm install failed');
+if (run('npm install', { cwd: ROOT, stdio: 'inherit' }).status !== 0) die('npm install failed');
 
 info('npm run build…');
-const build = run('npm run build', { cwd: ROOT, stdio: 'inherit' });
-if (build.status !== 0) die('npm run build failed');
+if (run('npm run build', { cwd: ROOT, stdio: 'inherit' }).status !== 0) die('npm run build failed');
 
 ok('Build complete');
 console.log();
 
-// ─── PM2 start ───────────────────────────────────────────────────────────────
+// ─── Sudoers ─────────────────────────────────────────────────────────────────
+// Grant the deploy user passwordless sudo for the specific nginx commands the
+// deployer runtime needs. Nothing broader than these exact operations.
+console.log(`${c.bold}  Configuring sudoers for nginx management${c.reset}`);
+
+const nginxBin = run('which nginx').stdout.trim();
+const teeBin   = run('which tee').stdout.trim();
+const lnBin    = run('which ln').stdout.trim();
+const rmBin    = run('which rm').stdout.trim();
+
+if (!nginxBin || !teeBin || !lnBin || !rmBin) {
+  die('Could not locate required binaries (nginx, tee, ln, rm).');
+}
+
+const sudoersPath = '/etc/sudoers.d/deployer-nginx';
+const sudoersContent = [
+  `# Deployer nginx management — written by deployer-setup`,
+  `# Grants "${deployUser}" passwordless sudo for nginx config operations only.`,
+  `Cmnd_Alias DEPLOYER_NGINX = \\`,
+  `    ${nginxBin} -t, \\`,
+  `    ${nginxBin} -s reload, \\`,
+  `    ${teeBin} /etc/nginx/sites-available/*, \\`,
+  `    ${lnBin} -sf /etc/nginx/sites-available/* /etc/nginx/sites-enabled/*, \\`,
+  `    ${rmBin} -f /etc/nginx/sites-enabled/*, \\`,
+  `    ${rmBin} -f /etc/nginx/sites-available/*`,
+  `${deployUser} ALL=(ALL) NOPASSWD: DEPLOYER_NGINX`,
+].join('\n');
+
+// Write to a temp file first, validate with visudo, then move into place
+const tmpSudoers = `/tmp/deployer-sudoers-${process.pid}`;
+writeFileSync(tmpSudoers, sudoersContent + '\n', { mode: 0o440 });
+
+const visudoCheck = run(`visudo -c -f ${tmpSudoers} 2>&1`);
+if (visudoCheck.status !== 0) {
+  run(`rm -f ${tmpSudoers}`);
+  die(`Generated sudoers file failed validation:\n${visudoCheck.stdout}${visudoCheck.stderr}`);
+}
+
+run(`mv ${tmpSudoers} ${sudoersPath}`);
+chmodSync(sudoersPath, 0o440);
+ok(`Sudoers written: ${sudoersPath}`);
+info(`Grants "${deployUser}" NOPASSWD for: nginx -t, nginx -s reload, tee/ln/rm in /etc/nginx/`);
+console.log();
+
+// ─── PM2 start (as deploy user) ──────────────────────────────────────────────
 console.log(`${c.bold}  Starting deployer via PM2${c.reset}`);
 
-// Stop existing instance if any
-run(`pm2 delete ${pm2Name} 2>/dev/null || true`);
+// Run PM2 as the deploy user, not root
+const pm2Cmd = (cmd) => run(`su -s /bin/sh ${deployUser} -c "pm2 ${cmd}"`, { cwd: ROOT, stdio: 'inherit' });
 
-const pm2Start = run(
-  `pm2 start dist/index.js --name ${pm2Name} --env production`,
-  { cwd: ROOT, stdio: 'inherit' }
-);
-if (pm2Start.status !== 0) die('PM2 start failed');
+pm2Cmd(`delete ${pm2Name} 2>/dev/null || true`);
 
-run(`pm2 save`, { stdio: 'inherit' });
-ok(`Deployer running as PM2 process "${pm2Name}"`);
+if (pm2Cmd(`start dist/index.js --name ${pm2Name} --env production`).status !== 0) {
+  die('PM2 start failed');
+}
+pm2Cmd('save');
+
+ok(`Deployer running as PM2 process "${pm2Name}" (user: ${deployUser})`);
 console.log();
 
 // ─── Nginx vhost for deployer itself ─────────────────────────────────────────
@@ -257,16 +328,15 @@ if (domain) {
     `        proxy_set_header X-Forwarded-Proto $scheme;`,
     `    }`,
     `}`,
-  ].join('\n');
+  ].join('\n') + '\n';
 
-  writeFileSync(configPath, nginxConf + '\n');
+  // We're running as root during setup, so write directly
+  writeFileSync(configPath, nginxConf);
   ok(`Config written: ${configPath}`);
 
-  // Symlink into sites-enabled
   run(`ln -sf ${configPath} ${enabledPath}`);
   ok(`Symlink created: ${enabledPath}`);
 
-  // Validate and reload
   const validate = run('nginx -t 2>&1');
   if (validate.status !== 0) {
     die(`nginx config invalid after writing vhost:\n${validate.stdout}${validate.stderr}`);
@@ -281,10 +351,11 @@ if (domain) {
 console.log(`${c.bold}${c.green}  ✔ Setup complete!${c.reset}`);
 console.log();
 if (domain) {
-  info(`Deployer API:  http://${domain}/`);
+  info(`Deployer API:   http://${domain}/`);
 } else {
-  info(`Deployer API:  http://localhost:${port}/`);
+  info(`Deployer API:   http://localhost:${port}/`);
 }
-info(`Logs:          pm2 logs ${pm2Name}`);
-info(`Status:        pm2 status`);
+info(`Logs:           pm2 logs ${pm2Name}`);
+info(`Status:         pm2 status`);
+info(`Sudoers:        ${sudoersPath}`);
 console.log();

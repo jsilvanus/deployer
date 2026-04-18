@@ -1,4 +1,4 @@
-import { readFile, writeFile, unlink, symlink, access, mkdir } from 'node:fs/promises';
+import { access } from 'node:fs/promises';
 import { execa } from 'execa';
 import type { AnyLogger } from '../types/logger.js';
 
@@ -27,7 +27,9 @@ export class NginxService {
 
   async read(appName: string): Promise<string | null> {
     try {
-      return await readFile(this.configPath(appName), 'utf8');
+      // tee needs sudo to write, but reading sites-available is world-readable
+      const result = await execa('cat', [this.configPath(appName)]);
+      return result.stdout;
     } catch {
       return null;
     }
@@ -58,8 +60,7 @@ export class NginxService {
 
   async write(appName: string, config: string): Promise<void> {
     this.logger.info({ appName }, 'writing nginx config');
-    await mkdir(SITES_AVAILABLE, { recursive: true });
-    await writeFile(this.configPath(appName), config, 'utf8');
+    await execa('sudo', ['tee', this.configPath(appName)], { input: config });
     await this.enableSite(appName);
   }
 
@@ -69,26 +70,25 @@ export class NginxService {
       return;
     }
     this.logger.info({ appName }, 'restoring nginx config');
-    await writeFile(this.configPath(appName), previousConfig, 'utf8');
+    await execa('sudo', ['tee', this.configPath(appName)], { input: previousConfig });
     await this.reload();
   }
 
   async remove(appName: string): Promise<void> {
-    try { await unlink(this.symlinkPath(appName)); } catch { /* ok */ }
-    try { await unlink(this.configPath(appName)); } catch { /* ok */ }
+    try { await execa('sudo', ['rm', '-f', this.symlinkPath(appName)]); } catch { /* ok */ }
+    try { await execa('sudo', ['rm', '-f', this.configPath(appName)]); } catch { /* ok */ }
     await this.reload();
   }
 
   async enableSite(appName: string): Promise<void> {
-    await mkdir(SITES_ENABLED, { recursive: true });
-    try { await unlink(this.symlinkPath(appName)); } catch { /* ok if not exists */ }
-    await symlink(this.configPath(appName), this.symlinkPath(appName));
+    try { await execa('sudo', ['rm', '-f', this.symlinkPath(appName)]); } catch { /* ok */ }
+    await execa('sudo', ['ln', '-sf', this.configPath(appName), this.symlinkPath(appName)]);
     await this.reload();
   }
 
   async validate(): Promise<boolean> {
     try {
-      await execa('nginx', ['-t']);
+      await execa('sudo', ['nginx', '-t']);
       return true;
     } catch {
       return false;
@@ -97,6 +97,6 @@ export class NginxService {
 
   async reload(): Promise<void> {
     this.logger.info('reloading nginx');
-    await execa('nginx', ['-s', 'reload']);
+    await execa('sudo', ['nginx', '-s', 'reload']);
   }
 }
