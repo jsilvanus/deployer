@@ -18,6 +18,7 @@ function rowToApp(row: typeof apps.$inferSelect): App {
     dockerCompose: row.dockerCompose,
     nginxEnabled:  row.nginxEnabled,
     dbEnabled:     row.dbEnabled,
+    dbType:        (row.dbType ?? 'postgres') as App['dbType'],
     apiKeyPrefix:  row.apiKeyPrefix,
     createdAt:     row.createdAt,
     updatedAt:     row.updatedAt,
@@ -66,6 +67,7 @@ export class AppService {
         nginxEnabled:  input.nginxEnabled ?? false,
         domain:        input.domain,
         dbEnabled:     input.dbEnabled ?? false,
+        dbType:        input.dbType ?? 'postgres',
         dbName:        input.dbName,
         port:          input.port,
         apiKeyHash,
@@ -80,17 +82,22 @@ export class AppService {
     const app = rowToApp(row);
     const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
 
-    // Auto-generate a dedicated DB password and DATABASE_URL when dbEnabled
+    // Auto-generate DATABASE_URL (and DB_PASSWORD for postgres) when dbEnabled
     let generatedDbPassword: string | undefined;
     if (input.dbEnabled) {
       const dbName = input.dbName ?? input.name;
-      generatedDbPassword = randomBytes(16).toString('hex');
-      await envSvc.set(app.id, 'DB_PASSWORD', generatedDbPassword);
-      await envSvc.set(
-        app.id,
-        'DATABASE_URL',
-        `postgres://${dbName}:${generatedDbPassword}@localhost/${dbName}`,
-      );
+      const dbType = input.dbType ?? 'postgres';
+      if (dbType === 'sqlite') {
+        await envSvc.set(app.id, 'DATABASE_URL', `file:${input.deployPath}/${dbName}.db`);
+      } else {
+        generatedDbPassword = randomBytes(16).toString('hex');
+        await envSvc.set(app.id, 'DB_PASSWORD', generatedDbPassword);
+        await envSvc.set(
+          app.id,
+          'DATABASE_URL',
+          `postgres://${dbName}:${generatedDbPassword}@localhost/${dbName}`,
+        );
+      }
     }
 
     return {

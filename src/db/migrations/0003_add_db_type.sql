@@ -1,0 +1,1 @@
+ALTER TABLE `apps` ADD `db_type` text NOT NULL DEFAULT 'postgres';
