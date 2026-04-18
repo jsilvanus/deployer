@@ -1,0 +1,21 @@
+services:
+  deployer:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${DEPLOYER_PORT:-3000}:3000"
+    volumes:
+      # Persist SQLite database
+      - deployer-data:/data
+      # Mount host app directory so deployer can clone/manage apps
+      - /srv/apps:/srv/apps
+      # Docker socket — required for managing Docker-based apps
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
+    environment:
+      DEPLOYER_DB_PATH: /data/deployer.db
+      DEPLOYER_ALLOWED_DEPLOY_PATHS: /srv/apps
+
+volumes:
+  deployer-data:
