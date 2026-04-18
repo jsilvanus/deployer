@@ -1,4 +1,5 @@
 export type AppType = 'node' | 'docker';
+export type DbType = 'postgres' | 'sqlite';
 
 export interface App {
   id: string;
@@ -11,6 +12,7 @@ export interface App {
   nginxEnabled: boolean;
   domain?: string;
   dbEnabled: boolean;
+  dbType: DbType;
   dbName?: string;
   apiKeyPrefix: string;
   port?: number;
@@ -28,6 +30,7 @@ export interface CreateAppInput {
   nginxEnabled?: boolean;
   domain?: string;
   dbEnabled?: boolean;
+  dbType?: DbType;
   dbName?: string;
   port?: number;
 }
@@ -37,6 +40,7 @@ export interface UpdateAppInput {
   domain?: string;
   nginxEnabled?: boolean;
   dbEnabled?: boolean;
+  dbType?: DbType;
   dbName?: string;
 }
 

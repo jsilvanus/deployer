@@ -9,6 +9,11 @@ export const databaseCreateStep: DeploymentStep = {
   reversible: true,
 
   async captureSnapshot(ctx: StepContext): Promise<Record<string, unknown>> {
+    if (!ctx.app.dbEnabled || ctx.app.dbType === 'sqlite') {
+      const data: DatabaseCreateSnapshotData = { dbName: '', dbUser: '', created: false };
+      return data as unknown as Record<string, unknown>;
+    }
+
     const dbSvc = new DatabaseService(ctx.logger);
     const dbName = ctx.app.dbName ?? ctx.app.name;
     const existed = await dbSvc.databaseExists(dbName);
@@ -22,6 +27,10 @@ export const databaseCreateStep: DeploymentStep = {
 
   async execute(ctx: StepContext): Promise<void> {
     if (!ctx.app.dbEnabled) return;
+    if (ctx.app.dbType === 'sqlite') {
+      ctx.logger.info('sqlite database; skipping server-side provisioning');
+      return;
+    }
 
     const dbSvc = new DatabaseService(ctx.logger);
     const dbName = ctx.app.dbName ?? ctx.app.name;

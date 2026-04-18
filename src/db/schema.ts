@@ -11,6 +11,7 @@ export const apps = sqliteTable('apps', {
   nginxEnabled:   integer('nginx_enabled', { mode: 'boolean' }).notNull().default(false),
   domain:         text('domain'),
   dbEnabled:      integer('db_enabled', { mode: 'boolean' }).notNull().default(false),
+  dbType:         text('db_type').notNull().default('postgres'),
   dbName:         text('db_name'),
   apiKeyHash:     text('api_key_hash').notNull(),
   apiKeyPrefix:   text('api_key_prefix').notNull(),
