@@ -34,13 +34,20 @@ export async function statusRoutes(fastify: FastifyInstance, opts: { db: Db; con
         uptime: info?.uptime ?? null,
       };
     } else {
-      const ps = await docker.composePsStatus(app.deployPath);
+      const [ps, stats] = await Promise.all([
+        docker.composePsStatus(app.deployPath),
+        docker.composeStats(app.deployPath),
+      ]);
+      const statsMap = new Map(stats.map(s => [s.name, s]));
       return {
         appId: app.id,
         appName: app.name,
         type: app.type,
         status: ps.status,
-        services: ps.services,
+        services: ps.services.map(svc => ({
+          ...svc,
+          ...statsMap.get(svc.name),
+        })),
       };
     }
   });

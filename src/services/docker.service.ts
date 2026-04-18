@@ -117,4 +117,38 @@ export class DockerService {
       return { status: 'not_found', services: [] };
     }
   }
+
+  async composeStats(composePath: string): Promise<Array<{
+    name: string;
+    cpu: number;
+    memory: string;
+    memoryPercent: number;
+    pids: number;
+  }>> {
+    try {
+      const { stdout: idOut } = await execa(
+        'docker', ['compose', 'ps', '-q'],
+        { cwd: composePath },
+      );
+      const ids = idOut.trim().split('\n').filter(Boolean);
+      if (ids.length === 0) return [];
+
+      const { stdout } = await execa('docker', [
+        'stats', '--no-stream', '--format', 'json', ...ids,
+      ]);
+      if (!stdout.trim()) return [];
+
+      type StatsRow = { Name: string; CPUPerc: string; MemUsage: string; MemPerc: string; PIDs: string };
+      const rows: StatsRow[] = stdout.trim().split('\n').map(l => JSON.parse(l) as StatsRow);
+      return rows.map(r => ({
+        name:          r.Name,
+        cpu:           parseFloat(r.CPUPerc),
+        memory:        r.MemUsage,
+        memoryPercent: parseFloat(r.MemPerc),
+        pids:          parseInt(r.PIDs, 10),
+      }));
+    } catch {
+      return [];
+    }
+  }
 }
