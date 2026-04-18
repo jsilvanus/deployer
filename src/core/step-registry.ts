@@ -8,6 +8,7 @@ import { pm2StartStep } from './steps/pm2-start.step.js';
 import { pm2RestartStep } from './steps/pm2-restart.step.js';
 import { dockerBuildStep } from './steps/docker-build.step.js';
 import { dockerComposeUpStep } from './steps/docker-compose-up.step.js';
+import { composeWriteStep } from './steps/compose-write.step.js';
 import { nginxConfigureStep } from './steps/nginx-configure.step.js';
 
 const steps: DeploymentStep[] = [
@@ -20,6 +21,7 @@ const steps: DeploymentStep[] = [
   pm2RestartStep,
   dockerBuildStep,
   dockerComposeUpStep,
+  composeWriteStep,
   nginxConfigureStep,
 ];
 

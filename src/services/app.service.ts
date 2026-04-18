@@ -68,7 +68,7 @@ export class AppService {
         id:            randomUUID(),
         name:          input.name,
         type:          input.type,
-        repoUrl:       input.repoUrl,
+        repoUrl:       input.repoUrl ?? '',
         branch:        input.branch ?? 'main',
         deployPath:    input.deployPath,
         dockerCompose: input.dockerCompose ?? false,
@@ -118,6 +118,10 @@ export class AppService {
       await envSvc.set(app.id, '_PG_ADMIN_PASSWORD', input.pgAdminPassword);
     }
 
+    if (input.composeContent) {
+      await envSvc.set(app.id, '_COMPOSE_CONTENT', input.composeContent);
+    }
+
     return {
       app,
       apiKey,
@@ -149,11 +153,14 @@ export class AppService {
     const location     = input.nginxLocation ?? existing.nginxLocation;
     await this.assertNginxUnique(domain, location, nginxEnabled, id);
 
-    const { pgAdminPassword, ...dbFields } = input;
+    const { pgAdminPassword, composeContent, ...dbFields } = input;
+    const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
 
     if (pgAdminPassword) {
-      const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
       await envSvc.set(id, '_PG_ADMIN_PASSWORD', pgAdminPassword);
+    }
+    if (composeContent) {
+      await envSvc.set(id, '_COMPOSE_CONTENT', composeContent);
     }
 
     const [row] = await this.db

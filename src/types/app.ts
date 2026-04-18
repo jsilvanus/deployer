@@ -1,4 +1,4 @@
-export type AppType = 'node' | 'docker';
+export type AppType = 'node' | 'docker' | 'compose';
 export type DbType = 'postgres' | 'sqlite';
 
 export interface App {
@@ -27,8 +27,9 @@ export interface App {
 export interface CreateAppInput {
   name: string;
   type: AppType;
-  repoUrl: string;
+  repoUrl?: string;
   branch?: string;
+  composeContent?: string;
   deployPath: string;
   dockerCompose?: boolean;
   nginxEnabled?: boolean;
@@ -45,6 +46,7 @@ export interface CreateAppInput {
 }
 
 export interface UpdateAppInput {
+  composeContent?: string;
   branch?: string;
   domain?: string;
   nginxEnabled?: boolean;
