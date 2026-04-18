@@ -58,6 +58,7 @@ export class DeploymentService {
       .returning();
     if (!row) throw new Error('Insert failed');
     this.cache?.touch(`deployment:${row.id}`, now);
+    this.cache?.touch(`app-deployments:${appId}`, now);
     return rowToDeployment(row);
   }
 

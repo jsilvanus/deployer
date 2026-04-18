@@ -59,11 +59,19 @@ export async function deploymentsRoutes(
     schema: { params: deploymentIdParam },
   }, async (request, reply) => {
     const { deploymentId } = request.params as { deploymentId: string };
+    // Snapshots are frozen once the deployment finishes — reuse the deployment cache key
+    const cached = opts.cache.get(`deployment:${deploymentId}`);
+    const ims = request.headers['if-modified-since'];
+    if (cached && ims && truncSec(new Date(ims)) >= truncSec(cached)) {
+      return reply.code(304).send();
+    }
     const deployment = await deploymentSvc.findById(deploymentId);
     if (!deployment) return reply.code(404).send({ error: 'Deployment not found' });
     if (!request.isAdmin && request.scopedAppId !== deployment.appId) {
       return reply.code(403).send({ error: 'Forbidden' });
     }
+    if (!cached) opts.cache.touch(`deployment:${deploymentId}`, deployment.finishedAt ?? deployment.createdAt);
+    reply.header('Last-Modified', (opts.cache.get(`deployment:${deploymentId}`) ?? deployment.createdAt).toUTCString());
     return deploymentSvc.getSnapshots(deploymentId);
   });
 

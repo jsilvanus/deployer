@@ -104,6 +104,7 @@ export class AppService {
 
     const app = rowToApp(row);
     this.cache?.touch(`app:${app.id}`, now);
+    this.cache?.touch('apps:list', now);
     const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
 
     // Auto-generate DATABASE_URL (and DB_PASSWORD for postgres) when dbEnabled
@@ -185,7 +186,10 @@ export class AppService {
       .set({ ...dbFields, updatedAt })
       .where(eq(apps.id, id))
       .returning();
-    if (row) this.cache?.touch(`app:${id}`, updatedAt);
+    if (row) {
+      this.cache?.touch(`app:${id}`, updatedAt);
+      this.cache?.touch('apps:list', updatedAt);
+    }
     return row ? rowToApp(row) : null;
   }
 
@@ -194,6 +198,7 @@ export class AppService {
     await envSvc.deleteAll(id);
     await this.db.delete(apps).where(eq(apps.id, id));
     this.cache?.delete(`app:${id}`);
+    this.cache?.touch('apps:list');
   }
 
   async listDeployments(appId: string, limit = 20): Promise<Deployment[]> {

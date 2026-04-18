@@ -26,7 +26,18 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
 
   fastify.get('/apps', async (request, reply) => {
     if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
-    return svc.list();
+    const cached = opts.cache.get('apps:list');
+    const ims = request.headers['if-modified-since'];
+    if (cached && ims && truncSec(new Date(ims)) >= truncSec(cached)) {
+      return reply.code(304).send();
+    }
+    const list = await svc.list();
+    if (list.length > 0) {
+      const latest = list.reduce((max, a) => a.updatedAt > max ? a.updatedAt : max, list[0]!.updatedAt);
+      if (!cached) opts.cache.touch('apps:list', latest);
+    }
+    reply.header('Last-Modified', (opts.cache.get('apps:list') ?? new Date()).toUTCString());
+    return list;
   });
 
   fastify.post('/apps', {
@@ -125,9 +136,19 @@ export async function appsRoutes(fastify: FastifyInstance, opts: { db: Db; confi
     if (!request.isAdmin && request.scopedAppId !== appId) {
       return reply.code(403).send({ error: 'Forbidden' });
     }
+    const cached = opts.cache.get(`app-deployments:${appId}`);
+    const ims = request.headers['if-modified-since'];
+    if (cached && ims && truncSec(new Date(ims)) >= truncSec(cached)) {
+      return reply.code(304).send();
+    }
     const app = await svc.findById(appId);
     if (!app) return reply.code(404).send({ error: 'App not found' });
-    return svc.listDeployments(appId);
+    const list = await svc.listDeployments(appId);
+    if (!cached && list.length > 0) {
+      opts.cache.touch(`app-deployments:${appId}`, list[0]!.createdAt);
+    }
+    reply.header('Last-Modified', (opts.cache.get(`app-deployments:${appId}`) ?? new Date()).toUTCString());
+    return list;
   });
 
   // ── Per-app env vars ────────────────────────────────────────────────────────
