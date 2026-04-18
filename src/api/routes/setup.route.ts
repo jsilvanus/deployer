@@ -57,7 +57,10 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
     const mode = requestedMode === 'auto' ? await traefikSvc.detectMode() : requestedMode;
     const port = body.port ?? DEFAULT_PORT;
 
-    const composeContent = traefikSvc.generateCompose(mode, { acmeEmail: body.acmeEmail, port });
+    const composeContent = traefikSvc.generateCompose(mode, {
+      ...(body.acmeEmail !== undefined && { acmeEmail: body.acmeEmail }),
+      port,
+    });
 
     const deployPath = resolve(
       opts.config.allowedDeployPaths.split(',')[0]?.trim() ?? '/srv/apps',
