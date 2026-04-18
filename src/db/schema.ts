@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, uniqueIndex, real } from 'drizzle-orm/sqlite-core';
 
 export const apps = sqliteTable('apps', {
   id:             text('id').primaryKey(),
@@ -85,3 +85,15 @@ export const appEnvVars = sqliteTable('app_env_vars', {
 
 export type AppEnvVarRow = typeof appEnvVars.$inferSelect;
 export type NewAppEnvVarRow = typeof appEnvVars.$inferInsert;
+
+export const appMetrics = sqliteTable('app_metrics', {
+  id:        text('id').primaryKey(),
+  appId:     text('app_id').notNull().references(() => apps.id),
+  timestamp: integer('timestamp').notNull(), // Unix seconds
+  status:    text('status').notNull(),
+  cpu:       real('cpu'),
+  memoryMb:  real('memory_mb'),
+});
+
+export type AppMetricRow = typeof appMetrics.$inferSelect;
+export type NewAppMetricRow = typeof appMetrics.$inferInsert;
