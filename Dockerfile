@@ -21,6 +21,8 @@ RUN npm prune --omit=dev
 # ---- runtime ----
 FROM node:20-alpine
 
+RUN apk add --no-cache git docker-cli postgresql-client
+
 WORKDIR /app
 
 COPY --from=builder /app/dist ./dist

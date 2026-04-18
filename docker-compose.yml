@@ -16,6 +16,11 @@ services:
     environment:
       DEPLOYER_DB_PATH: /data/deployer.db
       DEPLOYER_ALLOWED_DEPLOY_PATHS: /srv/apps
+      # Point at a containerised PostgreSQL — override as needed
+      # DEPLOYER_PG_HOST: postgres
+      # DEPLOYER_PG_PORT: 5432
+      # DEPLOYER_PG_USER: postgres
+      # DEPLOYER_PG_PASSWORD: secret
 
 volumes:
   deployer-data:

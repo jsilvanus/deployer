@@ -14,7 +14,7 @@ export const databaseCreateStep: DeploymentStep = {
       return data as unknown as Record<string, unknown>;
     }
 
-    const dbSvc = new DatabaseService(ctx.logger);
+    const dbSvc = new DatabaseService(ctx.logger, ctx.config);
     const dbName = ctx.app.dbName ?? ctx.app.name;
     const existed = await dbSvc.databaseExists(dbName);
     const data: DatabaseCreateSnapshotData = {
@@ -32,7 +32,7 @@ export const databaseCreateStep: DeploymentStep = {
       return;
     }
 
-    const dbSvc = new DatabaseService(ctx.logger);
+    const dbSvc = new DatabaseService(ctx.logger, ctx.config);
     const dbName = ctx.app.dbName ?? ctx.app.name;
 
     if (await dbSvc.databaseExists(dbName)) {
@@ -65,7 +65,7 @@ export const databaseCreateStep: DeploymentStep = {
       return;
     }
 
-    const dbSvc = new DatabaseService(ctx.logger);
+    const dbSvc = new DatabaseService(ctx.logger, ctx.config);
     await dbSvc.dropDatabase(data.dbName);
     await dbSvc.dropUser(data.dbUser);
   },
