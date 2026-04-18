@@ -6,6 +6,7 @@ const configSchema = z.object({
   envEncryptionKey:      z.string().regex(/^[0-9a-fA-F]{64}$/, 'DEPLOYER_ENV_ENCRYPTION_KEY must be 64 hex chars (32 bytes)'),
   allowedDeployPaths:    z.string().default('/srv/apps'),
   dbPath:                z.string().default('./deployer.db'),
+  corsOrigins:           z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -17,6 +18,7 @@ export function loadConfig(): Config {
     envEncryptionKey:   process.env['DEPLOYER_ENV_ENCRYPTION_KEY'],
     allowedDeployPaths: process.env['DEPLOYER_ALLOWED_DEPLOY_PATHS'],
     dbPath:             process.env['DEPLOYER_DB_PATH'],
+    corsOrigins:        process.env['DEPLOYER_CORS_ORIGINS'],
   });
 
   if (!result.success) {

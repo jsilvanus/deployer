@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Server, IncomingMessage, ServerResponse } from 'node:http';
+import cors from '@fastify/cors';
 import authPlugin from './plugins/auth.plugin.js';
 import errorHandlerPlugin from './plugins/error-handler.plugin.js';
 import rateLimitPlugin from './plugins/rate-limit.plugin.js';
@@ -27,6 +28,11 @@ export async function createServer(config: Config, db: Db): Promise<FastifyInsta
 
   await fastify.register(errorHandlerPlugin);
   await fastify.register(rateLimitPlugin);
+
+  if (config.corsOrigins) {
+    const origins = config.corsOrigins.split(',').map(o => o.trim()).filter(Boolean);
+    await fastify.register(cors, { origin: origins });
+  }
   await fastify.register(authPlugin, { config, db });
   await fastify.register(healthRoutes);
   await fastify.register(appsRoutes, { db, config, cache });
