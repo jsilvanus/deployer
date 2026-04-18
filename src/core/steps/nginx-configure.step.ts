@@ -34,6 +34,7 @@ export const nginxConfigureStep: DeploymentStep = {
       appName: ctx.app.name,
       domain: ctx.app.domain,
       upstreamPort: port,
+      location: ctx.app.nginxLocation,
       ssl,
     });
     await nginx.write(ctx.app.name, config);

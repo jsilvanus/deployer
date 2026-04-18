@@ -10,6 +10,7 @@ export interface App {
   deployPath: string;
   dockerCompose: boolean;
   nginxEnabled: boolean;
+  nginxLocation: string;
   domain?: string;
   dbEnabled: boolean;
   dbType: DbType;
@@ -28,6 +29,7 @@ export interface CreateAppInput {
   deployPath: string;
   dockerCompose?: boolean;
   nginxEnabled?: boolean;
+  nginxLocation?: string;
   domain?: string;
   dbEnabled?: boolean;
   dbType?: DbType;
@@ -39,6 +41,7 @@ export interface UpdateAppInput {
   branch?: string;
   domain?: string;
   nginxEnabled?: boolean;
+  nginxLocation?: string;
   dbEnabled?: boolean;
   dbType?: DbType;
   dbName?: string;

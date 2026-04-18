@@ -64,11 +64,13 @@ export class NginxService {
     appName: string;
     domain: string;
     upstreamPort: number;
+    location?: string;
     ssl?: SslConfig | null;
   }): string {
     const upstream = `http://127.0.0.1:${opts.upstreamPort}`;
+    const loc = opts.location ?? '/';
     const locationBlock = [
-      `    location / {`,
+      `    location ${loc} {`,
       `        proxy_pass ${upstream};`,
       `        proxy_http_version 1.1;`,
       `        proxy_set_header Upgrade $http_upgrade;`,

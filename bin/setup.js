@@ -70,6 +70,7 @@ function getArg(name) {
 const domain      = getArg('--domain');
 const port        = parseInt(getArg('--port') || '3000', 10);
 const pm2Name     = getArg('--pm2-name') || 'deployer';
+const location    = getArg('--location') || '/';
 const deployUser  = getArg('--user') || process.env.SUDO_USER || process.env.USER;
 
 if (!deployUser || deployUser === 'root') {
@@ -87,7 +88,7 @@ console.log(`${c.dim}  ───────────────────
 info(`Deploy user:    ${c.bold}${deployUser}${c.reset}`);
 info(`Port:           ${c.bold}${port}${c.reset}`);
 info(`PM2 name:       ${c.bold}${pm2Name}${c.reset}`);
-if (domain) info(`Reverse proxy:  ${c.bold}${domain}${c.reset} → 127.0.0.1:${port}`);
+if (domain) info(`Reverse proxy:  ${c.bold}${domain}${c.reset} → 127.0.0.1:${port} (location: ${location})`);
 else        info(`No --domain given — skipping nginx vhost for deployer`);
 console.log();
 
@@ -353,7 +354,7 @@ if (domain) {
 
   // ── Generate nginx config ──
   const locationBlock = [
-    `    location / {`,
+    `    location ${location} {`,
     `        proxy_pass http://127.0.0.1:${port};`,
     `        proxy_http_version 1.1;`,
     `        proxy_set_header Upgrade $http_upgrade;`,
