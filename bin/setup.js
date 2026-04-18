@@ -305,18 +305,54 @@ ok(`Deployer running as PM2 process "${pm2Name}" (user: ${deployUser})`);
 console.log();
 
 // ─── Nginx vhost for deployer itself ─────────────────────────────────────────
+let ssl = null; // hoisted so the Done section can read it
+
 if (domain) {
   console.log(`${c.bold}  Configuring nginx reverse proxy${c.reset}`);
 
-  const configName = `deployer-${domain.replace(/[^a-z0-9.-]/gi, '-')}`;
-  const configPath = `/etc/nginx/sites-available/${configName}`;
-  const enabledPath = `/etc/nginx/sites-enabled/${configName}`;
+  // ── SSL detection ──
+  const leCert    = `/etc/letsencrypt/live/${domain}/fullchain.pem`;
+  const leKey     = `/etc/letsencrypt/live/${domain}/privkey.pem`;
+  const leOptions = `/etc/letsencrypt/options-ssl-nginx.conf`;
+  const leDhparam = `/etc/letsencrypt/ssl-dhparams.pem`;
 
-  const nginxConf = [
-    `server {`,
-    `    listen 80;`,
-    `    server_name ${domain};`,
-    ``,
+  if (existsSync(leCert) && existsSync(leKey)) {
+    ssl = {
+      certPath:      leCert,
+      keyPath:       leKey,
+      optionsSslConf: existsSync(leOptions) ? leOptions : null,
+      dhparamPath:    existsSync(leDhparam) ? leDhparam : null,
+    };
+    ok(`Let's Encrypt certificate found — using HTTPS config`);
+  } else if (commandExists('certbot')) {
+    warn(`No certificate found for ${domain} — certbot is installed`);
+    const obtain = await ask(
+      `  ${c.cyan}›${c.reset}  Obtain a certificate now? (certbot --nginx -d ${domain}) ${c.dim}(y/N)${c.reset} `
+    );
+    if (obtain.toLowerCase() === 'y') {
+      info('Running certbot…');
+      const certbotResult = run(`certbot --nginx -d ${domain}`, { stdio: 'inherit' });
+      if (certbotResult.status !== 0) {
+        warn('certbot failed — falling back to plain HTTP. You can run certbot manually later.');
+      } else {
+        ok(`Certificate obtained`);
+        ssl = {
+          certPath:      leCert,
+          keyPath:       leKey,
+          optionsSslConf: existsSync(leOptions) ? leOptions : null,
+          dhparamPath:    existsSync(leDhparam)  ? leDhparam : null,
+        };
+      }
+    } else {
+      info('Skipping — using plain HTTP. Run certbot later to enable SSL.');
+    }
+  } else {
+    info('certbot not installed — using plain HTTP config');
+    info('Install certbot and re-run setup (or run certbot manually) to enable SSL.');
+  }
+
+  // ── Generate nginx config ──
+  const locationBlock = [
     `    location / {`,
     `        proxy_pass http://127.0.0.1:${port};`,
     `        proxy_http_version 1.1;`,
@@ -326,11 +362,53 @@ if (domain) {
     `        proxy_set_header X-Real-IP $remote_addr;`,
     `        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`,
     `        proxy_set_header X-Forwarded-Proto $scheme;`,
+    `        proxy_cache_bypass $http_upgrade;`,
     `    }`,
-    `}`,
-  ].join('\n') + '\n';
+  ].join('\n');
 
-  // We're running as root during setup, so write directly
+  let nginxConf;
+  if (ssl) {
+    const sslLines = [
+      `    ssl_certificate ${ssl.certPath};`,
+      `    ssl_certificate_key ${ssl.keyPath};`,
+      ...(ssl.optionsSslConf ? [`    include ${ssl.optionsSslConf};`] : []),
+      ...(ssl.dhparamPath    ? [`    ssl_dhparam ${ssl.dhparamPath};`] : []),
+    ].join('\n');
+
+    nginxConf = [
+      `server {`,
+      `    listen 80;`,
+      `    server_name ${domain};`,
+      `    return 301 https://$host$request_uri;`,
+      `}`,
+      ``,
+      `server {`,
+      `    listen 443 ssl;`,
+      `    server_name ${domain};`,
+      ``,
+      sslLines,
+      ``,
+      locationBlock,
+      `}`,
+      ``,
+    ].join('\n');
+  } else {
+    nginxConf = [
+      `server {`,
+      `    listen 80;`,
+      `    server_name ${domain};`,
+      ``,
+      locationBlock,
+      `}`,
+      ``,
+    ].join('\n');
+  }
+
+  const configName  = `deployer-${domain.replace(/[^a-z0-9.-]/gi, '-')}`;
+  const configPath  = `/etc/nginx/sites-available/${configName}`;
+  const enabledPath = `/etc/nginx/sites-enabled/${configName}`;
+
+  // Running as root during setup — write directly
   writeFileSync(configPath, nginxConf);
   ok(`Config written: ${configPath}`);
 
@@ -351,7 +429,7 @@ if (domain) {
 console.log(`${c.bold}${c.green}  ✔ Setup complete!${c.reset}`);
 console.log();
 if (domain) {
-  info(`Deployer API:   http://${domain}/`);
+  info(`Deployer API:   ${ssl ? 'https' : 'http'}://${domain}/`);
 } else {
   info(`Deployer API:   http://localhost:${port}/`);
 }
