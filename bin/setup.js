@@ -67,11 +67,16 @@ function getArg(name) {
   return idx !== -1 && args[idx + 1] ? args[idx + 1] : null;
 }
 
-const domain      = getArg('--domain');
-const port        = parseInt(getArg('--port') || '3000', 10);
-const pm2Name     = getArg('--pm2-name') || 'deployer';
-const location    = getArg('--location') || '/';
-const deployUser  = getArg('--user') || process.env.SUDO_USER || process.env.USER;
+const domain        = getArg('--domain');
+const port          = parseInt(getArg('--port') || '3000', 10);
+const pm2Name       = getArg('--pm2-name') || 'deployer';
+const location      = getArg('--location') || '/';
+const deployUser    = getArg('--user') || process.env.SUDO_USER || process.env.USER;
+const traefikMode   = getArg('--traefik-mode');          // standalone | behind-nginx | auto
+const traefikPort   = parseInt(getArg('--traefik-port') || '8080', 10);
+const acmeEmail     = getArg('--acme-email');
+const doTraefik     = args.includes('--traefik') || !!traefikMode;
+const doSelfRegister = args.includes('--self-register');
 
 if (!deployUser || deployUser === 'root') {
   die(
@@ -423,6 +428,80 @@ if (domain) {
 
   run('nginx -s reload');
   ok('nginx reloaded');
+  console.log();
+}
+
+// ─── Post-startup API calls (Traefik, self-register) ─────────────────────────
+if (doTraefik || doSelfRegister) {
+  console.log(`${c.bold}  Post-startup configuration${c.reset}`);
+
+  // Read the admin token from the .env we just wrote
+  let adminToken = '';
+  try {
+    const envContent = readFileSync(envPath, 'utf8');
+    const match = /^DEPLOYER_ADMIN_TOKEN=(.+)$/m.exec(envContent);
+    adminToken = match?.[1]?.trim() ?? '';
+  } catch { /* ignore */ }
+
+  if (!adminToken) {
+    warn('Could not read DEPLOYER_ADMIN_TOKEN from .env — skipping API calls');
+  } else {
+    // Wait for the server to accept connections
+    info('Waiting for deployer to be ready…');
+    let ready = false;
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      try {
+        const res = await fetch(`http://localhost:${port}/health`);
+        if (res.ok) { ready = true; break; }
+      } catch { /* not yet */ }
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    if (!ready) {
+      warn('Deployer did not respond in time — run these manually once it starts:');
+      if (doTraefik)      warn(`  curl -X POST http://localhost:${port}/setup/traefik -H "Authorization: Bearer <token>" -d '{"mode":"${traefikMode ?? 'auto'}","port":${traefikPort}${acmeEmail ? `,"acmeEmail":"${acmeEmail}"` : ''}}'`);
+      if (doSelfRegister) warn(`  curl -X POST http://localhost:${port}/setup/self-register -H "Authorization: Bearer <token>"`);
+    } else {
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` };
+
+      if (doTraefik) {
+        info('Setting up Traefik…');
+        try {
+          const body = { mode: traefikMode ?? 'auto', port: traefikPort, ...(acmeEmail ? { acmeEmail } : {}) };
+          const res = await fetch(`http://localhost:${port}/setup/traefik`, {
+            method: 'POST', headers, body: JSON.stringify(body),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            ok(`Traefik setup started (${data.mode}) — deployment ID: ${data.deploymentId}`);
+          } else {
+            warn(`Traefik setup returned ${res.status}: ${JSON.stringify(data)}`);
+          }
+        } catch (err) {
+          warn(`Traefik setup failed: ${err.message}`);
+        }
+      }
+
+      if (doSelfRegister) {
+        info('Self-registering deployer…');
+        try {
+          const res = await fetch(`http://localhost:${port}/setup/self-register`, {
+            method: 'POST', headers, body: JSON.stringify({}),
+          });
+          const data = await res.json();
+          if (res.ok) {
+            ok(`Deployer registered as app "${data.app?.name ?? pm2Name}"`);
+            if (data.apiKey) info(`App API key: ${data.apiKey}  (save this — shown once)`);
+          } else {
+            warn(`Self-register returned ${res.status}: ${JSON.stringify(data)}`);
+          }
+        } catch (err) {
+          warn(`Self-register failed: ${err.message}`);
+        }
+      }
+    }
+  }
   console.log();
 }
 

@@ -1,20 +1,51 @@
 {
-  "name": "deployer",
+  "name": "@jsilvanus/deployer",
   "version": "0.1.0",
-  "description": "API and MCP server for reversible, authenticated app deployment",
+  "description": "Self-hosted deployment orchestrator — REST API and MCP server for reversible deployment of Node.js, Python, and Docker apps",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
+    "deployer": "bin/deployer.js",
     "deployer-setup": "bin/setup.js"
+  },
+  "files": [
+    "dist/",
+    "bin/",
+    ".env.example"
+  ],
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.build.json",
+    "postbuild": "cp -r src/db/migrations dist/db/migrations",
+    "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "test": "vitest run"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jsilvanus/deployer.git"
+  },
+  "keywords": [
+    "deployment",
+    "orchestrator",
+    "mcp",
+    "pm2",
+    "docker",
+    "nginx",
+    "traefik",
+    "self-hosted",
+    "devops"
+  ],
+  "author": "jsilvanus",
+  "license": "MIT",
   "dependencies": {
     "@fastify/bearer-auth": "^9.3.0",
     "@modelcontextprotocol/sdk": "^1.10.0",

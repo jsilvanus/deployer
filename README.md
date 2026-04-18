@@ -1,54 +1,105 @@
-# deployer
+# @jsilvanus/deployer
 
-A self-hosted deployment orchestrator with a REST API and MCP server. Manages deploying, updating, and **reversibly rolling back** Node.js and Dockerized applications on a Linux server.
+A self-hosted deployment orchestrator with a REST API and MCP server. Manages deploying, updating, and **reversibly rolling back** Node.js, Python, and Docker applications on a Linux server.
 
-Every deployment step captures a snapshot of the state it is about to change. If any step fails — or if you trigger a rollback later — each step is undone in reverse order: git is reset, `.env` files are restored from an encrypted backup, migrations are rolled back, and nginx configs are rewritten.
-
----
-
-## Requirements
-
-### Runtime
-
-| Requirement | Notes |
-|---|---|
-| **Node.js ≥ 20** | ESM support required |
-| **npm ≥ 10** | Comes with Node.js 20 |
-
-### Host tools (must be in `PATH`)
-
-| Tool | Used for | Required when |
-|---|---|---|
-| `git` | Clone, pull, reset | Always |
-| `pm2` | Process management | Bare-metal Node.js apps |
-| `docker` | Build and run containers | Docker apps |
-| `nginx` | Reverse proxy | `nginxEnabled: true` on any app |
-| `psql` | Database provisioning | `dbEnabled: true` on any app |
-
-### System
-
-| Requirement | Notes |
-|---|---|
-| **Ubuntu / Debian Linux** | Nginx config uses `/etc/nginx/sites-available` + `sites-enabled` symlinks |
-| **PostgreSQL running** | The deployer connects to an existing instance — it does **not** install or start Postgres |
-| Write access to `/etc/nginx/sites-available` | Required for nginx management; run deployer as root or configure `sudoers` |
-| SSH key or HTTPS credentials for git | Needed to clone private repositories |
+Every step snapshots the state it changes before running. On failure — or on an explicit rollback — every completed step is undone in reverse: git is reset, `.env` files are restored from encrypted backups, migrations are reversed, and nginx configs are rewritten.
 
 ---
 
-## Installation
+## Quick start (npx)
 
 ```bash
-git clone <this-repo>
-cd deployer
-npm install
-cp .env.example .env
-# edit .env — see Configuration below
-npm run dev       # development (hot reload)
-npm run build && npm start   # production
+# Create a minimal .env in your working directory
+cat > .env <<'EOF'
+DEPLOYER_ADMIN_TOKEN=replace-with-32-chars-or-more
+DEPLOYER_ENV_ENCRYPTION_KEY=replace-with-64-hex-chars
+EOF
+
+npx @jsilvanus/deployer
+# Server listens on http://localhost:3000
 ```
 
-On first start, the deployer automatically applies all pending SQLite migrations.
+Generate a secure encryption key:
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+---
+
+## Installation options
+
+### Option A — Bare metal (Ubuntu/Debian, PM2 + nginx)
+
+Clone, install dependencies, and run the interactive setup wizard:
+
+```bash
+git clone https://github.com/jsilvanus/deployer.git
+cd deployer
+sudo node bin/setup.js --user $USER --domain deployer.example.com --port 3000
+```
+
+The wizard:
+1. Checks prerequisites (Node ≥ 20, git, nginx, PM2)
+2. Generates `.env` with random secrets and prints the admin token
+3. Builds the TypeScript project (`npm run build`)
+4. Writes a minimal sudoers rule so the deployer can manage nginx configs without full root
+5. Starts the server as a PM2 process
+6. Configures an nginx reverse proxy for the domain (with optional Let's Encrypt SSL)
+
+**Full flag reference:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--user <name>` | `$SUDO_USER` | OS user to run PM2 under |
+| `--domain <host>` | — | Domain for nginx reverse proxy |
+| `--port <n>` | `3000` | HTTP port |
+| `--location <path>` | `/` | nginx location block |
+| `--pm2-name <name>` | `deployer` | PM2 process name |
+| `--traefik` | — | Set up Traefik after startup |
+| `--traefik-mode <mode>` | `auto` | `standalone`, `behind-nginx`, or `auto` |
+| `--traefik-port <n>` | `8080` | Traefik HTTP port |
+| `--acme-email <email>` | — | Let's Encrypt email (standalone mode) |
+| `--self-register` | — | Register the deployer as a managed app after startup |
+
+**Example — full bare-metal setup with Traefik and self-registration:**
+```bash
+sudo node bin/setup.js \
+  --user deploy \
+  --domain deployer.example.com \
+  --traefik \
+  --traefik-mode standalone \
+  --acme-email admin@example.com \
+  --self-register
+```
+
+### Option B — Docker
+
+```yaml
+# docker-compose.yml
+services:
+  deployer:
+    image: ghcr.io/jsilvanus/deployer:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/apps:/srv/apps
+      - deployer-data:/data
+    environment:
+      DEPLOYER_ADMIN_TOKEN: "your-admin-token"
+      DEPLOYER_ENV_ENCRYPTION_KEY: "64-hex-chars"
+      DEPLOYER_DB_PATH: /data/deployer.db
+      DEPLOYER_ALLOWED_DEPLOY_PATHS: /srv/apps
+
+volumes:
+  deployer-data:
+```
+
+```bash
+docker compose up -d
+```
+
+When running in Docker, `node` and `python` app types are not available (PM2 is not in the image). Use `docker` or `compose` app types instead.
 
 ---
 
@@ -56,157 +107,71 @@ On first start, the deployer automatically applies all pending SQLite migrations
 
 All configuration is via environment variables. Copy `.env.example` to `.env` and fill in:
 
-```
-DEPLOYER_PORT=3000
-DEPLOYER_ADMIN_TOKEN=<strong-random-secret>
-DEPLOYER_ENV_ENCRYPTION_KEY=<64-hex-chars>
-DEPLOYER_ALLOWED_DEPLOY_PATHS=/srv/apps
-DEPLOYER_DB_PATH=./deployer.db
-LOG_LEVEL=info
-NODE_ENV=production
-```
-
-| Variable | Required | Description |
-|---|---|---|
-| `DEPLOYER_ADMIN_TOKEN` | Yes | Admin bearer token. Minimum 16 characters. Grants full access to all routes. |
-| `DEPLOYER_ENV_ENCRYPTION_KEY` | Yes | 64 hex characters (32 bytes). Used for AES-256-GCM encryption of `.env` snapshots. **If lost, all rollback `.env` backups become unreadable.** Generate with: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
-| `DEPLOYER_ALLOWED_DEPLOY_PATHS` | No | Comma-separated list of allowed path prefixes for `deployPath`. Prevents path traversal. Default: `/srv/apps` |
-| `DEPLOYER_DB_PATH` | No | Path to the SQLite database file. Default: `./deployer.db` |
-| `DEPLOYER_PORT` | No | HTTP port. Default: `3000` |
-| `LOG_LEVEL` | No | Pino log level: `trace`, `debug`, `info`, `warn`, `error`. Default: `info` |
-| `NODE_ENV` | No | Set to `development` for pretty-printed logs. |
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DEPLOYER_ADMIN_TOKEN` | Yes | — | Bearer token for admin access. Min 16 chars. |
+| `DEPLOYER_ENV_ENCRYPTION_KEY` | Yes | — | 64 hex chars (32 bytes). AES-256-GCM key for `.env` backups. **Back this up — loss makes rollbacks unreadable.** |
+| `DEPLOYER_PORT` | No | `3000` | HTTP listen port |
+| `DEPLOYER_ALLOWED_DEPLOY_PATHS` | No | `/srv/apps` | Comma-separated list of allowed `deployPath` prefixes (path traversal guard) |
+| `DEPLOYER_DB_PATH` | No | `./deployer.db` | SQLite database file path |
+| `LOG_LEVEL` | No | `info` | `trace` \| `debug` \| `info` \| `warn` \| `error` |
+| `NODE_ENV` | No | `production` | Set to `development` for pretty-printed logs |
 
 ---
 
 ## Authentication
 
-Two-tier bearer token system:
+**Admin token** — set via `DEPLOYER_ADMIN_TOKEN`. Full access to all routes and all apps.
 
-### Admin token
-Set via `DEPLOYER_ADMIN_TOKEN`. Full access to all routes and all apps.
+**Per-app API keys** — generated when you register an app (`POST /apps`). Returned **once** — store it. A per-app key authorises deploy/update/rollback/status/logs/metrics for that one app only. Useful for scoping CI pipelines or AI agents.
 
-### Per-app API keys
-When you register an app (`POST /apps`), the server generates a random 64-char hex API key and returns it **once** in the response. Store it — it cannot be retrieved again.
-
-A per-app key authorises operations **only for that specific app**:
-- Deploy, update, rollback
-- Read deployment history and status
-
-This allows a CI/CD pipeline or an AI agent scoped to one app to operate without admin access.
-
----
-
-## PostgreSQL database provisioning
-
-When `dbEnabled: true` is set on an app, the deployer provisions a dedicated database and user during the deploy step.
-
-**Each app gets:**
-- Its own database (named `dbName`, or the app name if not specified)
-- Its own PostgreSQL user (same name as the database)
-- `GRANT ALL PRIVILEGES` on that database for that user
-
-**Password resolution order:**
-1. `dbPassword` option passed in the deploy request body
-2. `DB_PASSWORD` environment variable on the deployer host
-3. Falls back to the database name *(insecure — set `DB_PASSWORD` in production)*
-
-**The deployer does not install or start PostgreSQL.** It connects to an already-running Postgres instance using the `psql` CLI as the `postgres` superuser (or the user running the deployer process).
-
-**Rollback:** Dropping a database is destructive and opt-in. Pass `"allowDbDrop": true` in the deploy/rollback request to enable it. By default, database rollback logs a warning and skips.
+All routes (except `GET /health`) require `Authorization: Bearer <token>`.
 
 ---
 
 ## App types
 
+| Type | Runtime | Bare metal | Docker mode |
+|---|---|---|---|
+| `node` | PM2 | ✔ | ✗ |
+| `python` | PM2 + interpreter | ✔ | ✗ |
+| `docker` | Docker Compose (from git repo) | ✔ | ✔ |
+| `compose` | Docker Compose (from inline YAML) | ✔ | ✔ |
+
 ### `node` — bare-metal Node.js via PM2
 
-Deploy plan: `git clone → .env setup → database create → migrations → pm2 start → nginx`
+Entry point is read from `package.json` `main`, falling back to `index.js`.
 
-Update plan: `git pull → .env update → migrations → pm2 restart → nginx`
+Deploy plan: `preflight → git clone → env setup → database create → migrations → pm2 start → nginx`
 
-The entry point is read from `package.json`'s `main` field, falling back to `index.js`.
+Update plan: `preflight → git pull → env setup → migrations → pm2 restart → nginx`
 
-### `docker` — containerised via Docker Compose
+### `python` — bare-metal Python via PM2
 
-Deploy plan: `git clone → .env setup → database create → migrations → docker build → docker compose up → nginx`
+Entry point is detected by checking for `main.py`, `app.py`, `run.py`, `manage.py`, `wsgi.py` in order. Interpreter is detected from `.venv/bin/python`, `venv/bin/python`, falling back to `python3`.
 
-Update plan: `git pull → .env update → migrations → docker build → docker compose up → nginx`
+Deploy/update plans are identical to `node`.
 
-Set `dockerCompose: true` when registering the app. The deployer runs `docker compose up -d --build` from the deploy path.
+### `docker` — Docker Compose from a git repository
 
----
+The repo must contain a `docker-compose.yml`. At deploy time the deployer optionally generates:
+- `docker-compose.traefik.yml` — Traefik label override (when `domain` + `primaryService` are set)
+- `docker-compose.internal.yml` — joins all services to `deployer-internal` bridge network (when `internalNetwork: true`)
 
-## REST API
+Deploy plan: `preflight → git clone → env setup → database create → migrations → docker compose up → nginx`
 
-All routes except `GET /health` require `Authorization: Bearer <token>`.
+### `compose` — Docker Compose from inline YAML
 
-Deployments are **asynchronous** — trigger routes return `202 Accepted` with a `deploymentId`. Poll `GET /deployments/:id` for status.
+Store the `docker-compose.yml` content directly on the app record via `composeContent`. The deployer writes it to `deployPath` at deploy time. Traefik and internal-network overrides work the same as `docker` type.
 
-### Health
-
-```
-GET /health
-```
-
-### Apps
-
-```
-GET    /apps                        List all apps (admin only)
-POST   /apps                        Register a new app → returns app + apiKey
-GET    /apps/:appId                 Get app details
-PATCH  /apps/:appId                 Update app config (branch, domain, port, etc.)
-DELETE /apps/:appId                 Unregister app (does not stop or remove it)
-GET    /apps/:appId/status          Live runtime status (PM2 info or Docker container state)
-```
-
-### Deployments
-
-```
-POST   /apps/:appId/deploy                  Initial deploy → 202 + deploymentId
-POST   /apps/:appId/update                  Update (pull + restart) → 202
-POST   /apps/:appId/rollback                Rollback most recent successful deployment → 202
-GET    /apps/:appId/deployments             Deployment history
-
-GET    /deployments/:deploymentId           Deployment details + step log
-GET    /deployments/:deploymentId/snapshots All step snapshots (shows what rollback would revert)
-POST   /deployments/:deploymentId/rollback  Rollback a specific deployment → 202
-```
-
-### Migrations
-
-```
-POST /apps/:appId/migrations/run    Body: { "direction": "up"|"down" }
-```
-
-### MCP
-
-```
-POST /mcp    MCP Streamable HTTP (tool calls from AI agents)
-GET  /mcp    MCP SSE stream
-```
-
----
-
-## Deploy request body
-
-```jsonc
-{
-  "triggeredBy": "api",        // "api" or "mcp"
-  "envVars": {                 // written/merged into .env at deploy path
-    "NODE_ENV": "production",
-    "PORT": "4000",
-    "DATABASE_URL": "postgres://myapp:pass@localhost/myapp"
-  },
-  "dbPassword": "secret",      // password for the new Postgres user (optional)
-  "allowDbDrop": false         // set true to allow DROP DATABASE on rollback
-}
-```
+Deploy plan: `preflight → compose write → docker compose up`
 
 ---
 
 ## Registering an app
 
 ```bash
+# node app
 curl -X POST http://localhost:3000/apps \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
@@ -216,108 +181,327 @@ curl -X POST http://localhost:3000/apps \
     "repoUrl": "git@github.com:you/my-api.git",
     "branch": "main",
     "deployPath": "/srv/apps/my-api",
-    "nginxEnabled": true,
     "domain": "api.example.com",
     "port": 4000,
+    "nginxEnabled": true,
     "dbEnabled": true,
     "dbName": "my_api"
   }'
+
+# compose app (no git repo needed)
+curl -X POST http://localhost:3000/apps \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "postgres",
+    "type": "compose",
+    "deployPath": "/srv/apps/postgres",
+    "composeContent": "services:\n  db:\n    image: postgres:16\n    restart: unless-stopped\n",
+    "internalNetwork": true
+  }'
 ```
 
-**Save the `apiKey` from the response.** It is shown only once.
+**Save the `apiKey` from the response — it is shown only once.**
+
+### App fields
 
 | Field | Required | Description |
 |---|---|---|
-| `name` | Yes | Unique identifier. Lowercase, hyphens allowed. Used as PM2 process name and Docker image name. |
-| `type` | Yes | `"node"` or `"docker"` |
-| `repoUrl` | Yes | Git clone URL (SSH or HTTPS) |
+| `name` | Yes | Unique. Lowercase, hyphens OK. Used as PM2 process name and Docker project name. |
+| `type` | Yes | `node` \| `python` \| `docker` \| `compose` |
+| `repoUrl` | node/python/docker | Git clone URL (SSH or HTTPS) |
 | `branch` | No | Branch to deploy. Default: `main` |
-| `deployPath` | Yes | Absolute path on the server where the repo will be cloned |
-| `dockerCompose` | No | Use `docker compose` instead of a plain `docker run`. Default: `false` |
-| `nginxEnabled` | No | Manage an nginx reverse proxy block for this app. Default: `false` |
-| `domain` | No | Domain name for the nginx `server_name` directive |
-| `port` | No | Upstream port for nginx `proxy_pass`. Default: `3000` |
-| `dbEnabled` | No | Provision a Postgres database and user on deploy. Default: `false` |
-| `dbName` | No | Database name. Defaults to `name` |
+| `deployPath` | Yes | Absolute path on server |
+| `composeContent` | compose | Full `docker-compose.yml` content (stored encrypted) |
+| `primaryService` | No | Service name in compose file to expose via Traefik |
+| `internalNetwork` | No | Join all services to `deployer-internal` Docker bridge. Default: `true` for docker/compose, `false` for node/python |
+| `domain` | No | Domain for nginx or Traefik routing |
+| `port` | No | App port for nginx `proxy_pass` |
+| `nginxEnabled` | No | Manage nginx reverse proxy. Default: `false` |
+| `nginxLocation` | No | nginx location block path. Default: `/` |
+| `dbEnabled` | No | Provision a Postgres database on deploy. Default: `false` |
+| `dbType` | No | `postgres` \| `sqlite`. Default: `postgres` |
+| `dbName` | No | Database name. Default: app `name` |
+| `pgHost` | No | Postgres host. Default: `localhost` |
+| `pgPort` | No | Postgres port. Default: `5432` |
+| `pgAdminUser` | No | Postgres superuser for provisioning. Default: `postgres` |
+| `pgAdminPassword` | No | Postgres superuser password (stored encrypted) |
 
 ---
 
-## Reversibility
+## REST API
 
-Every step records a snapshot before it runs:
+All routes except `GET /health` require `Authorization: Bearer <token>`. Deployments return `202 Accepted` with a `deploymentId`; poll `GET /deployments/:id` for status.
 
-| Step | What is snapshotted | How rollback works |
-|---|---|---|
-| `git-clone` | Repository path | `rm -rf` the cloned directory |
-| `git-pull` | Commit hash before pull | `git reset --hard <hash>` |
-| `env-setup` | Full `.env` contents (AES-256-GCM encrypted) | Decrypt and restore previous file |
-| `database-create` | Whether the DB was newly created | `DROP DATABASE` + `DROP USER` (opt-in) |
-| `migration-up` | List of migration files applied | Run corresponding `.down.sql` files |
-| `pm2-start` | Process name | `pm2 delete <name>` |
-| `pm2-restart` | Commit hash + process status | `git reset --hard` + `pm2 restart` |
-| `docker-build` | Image name and tag | `docker rmi <new-tag>` |
-| `docker-compose-up` | Compose path and service names | `docker compose down` |
-| `nginx-configure` | Full previous config text | Write back previous config + `nginx -s reload` |
+### Health
+```
+GET  /health
+```
 
-Inspect snapshots for any deployment:
+### Apps
+```
+GET    /apps                          List all apps (admin only)
+POST   /apps                          Register app → returns { app, apiKey }
+GET    /apps/:appId                   Get app
+PATCH  /apps/:appId                   Update app config
+DELETE /apps/:appId                   Delete app record (does not stop processes)
+GET    /apps/:appId/deployments       Deployment history
+```
+
+### Deployments
+```
+POST   /apps/:appId/deploy            Initial deploy → 202 + deploymentId
+POST   /apps/:appId/update            Update (pull + restart) → 202
+POST   /apps/:appId/rollback          Roll back last successful deployment → 202
+POST   /apps/:appId/migrations/run    Body: { direction: "up"|"down" }
+
+GET    /deployments/:id               Deployment details
+GET    /deployments/:id/snapshots     Per-step snapshots (shows what rollback reverts)
+POST   /deployments/:id/rollback      Roll back a specific deployment → 202
+```
+
+### Status
+```
+GET  /apps/:appId/status
+
+# node/python response:
+{ appId, appName, type, status, pid, memory, cpu, uptime }
+
+# docker/compose response:
+{ appId, appName, type, status, services: [{ name, state, cpu, memory, memoryPercent, pids }] }
+```
+
+### Logs
+```
+GET  /apps/:appId/logs?lines=100&stderr=true
+# Returns: { appId, appName, stdout, stderr }
+# node/python: reads ~/.pm2/logs/<name>-out/err.log
+# docker/compose: docker compose logs --tail
+
+GET  /apps/:appId/logs/stream
+# Server-Sent Events live tail (text/event-stream)
+# Each event: data: "<line>\n\n"
+```
+
+### Metrics
+```
+GET  /apps/:appId/metrics?from=<ISO>&to=<ISO>
+# Returns: { appId, appName, from, to, points: [{ timestamp, status, cpu, memoryMb }] }
+# Default window: last hour. Retention: 7 days.
+
+GET  /metrics
+# Prometheus exposition format (admin only). Gauges:
+#   deployer_app_status{app,type}        1=running, 0=other
+#   deployer_app_cpu_percent{app,type}
+#   deployer_app_memory_mb{app,type}
+```
+
+### Per-app env vars
+```
+GET    /apps/:appId/env               List stored key names (values hidden)
+PUT    /apps/:appId/env               Body: { KEY: "value", ... }  — set/overwrite multiple
+DELETE /apps/:appId/env/:key          Delete one key
+```
+
+### Setup
+```
+POST  /setup/traefik
+# Body: { mode?: "auto"|"standalone"|"behind-nginx", acmeEmail?: string, port?: number }
+# Installs Traefik as a compose app. auto-detects standalone vs behind-nginx from nginx presence.
+
+POST  /setup/self-register
+# Body: { name?: string, repoUrl?: string, branch?: string, deployPath?: string }
+# Registers the deployer itself as a managed node app (auto-detects repoUrl from git remote).
+
+POST  /setup/self-update
+# Body: { name?: string }
+# Runs: git pull → npm install → npm build → db migrate → pm2 restart
+```
+
+### Deploy request body
+```jsonc
+{
+  "triggeredBy": "api",      // "api" | "mcp"
+  "envVars": {               // written/merged into .env at deployPath
+    "NODE_ENV": "production",
+    "PORT": "4000"
+  },
+  "allowDbDrop": false       // set true to allow DROP DATABASE on db rollback
+}
+```
+
+---
+
+## Traefik routing
+
+For Docker apps that need HTTP routing, the deployer integrates with Traefik:
+
 ```bash
-GET /deployments/:id/snapshots
+# 1. Install Traefik (auto-detects mode from nginx presence)
+POST /setup/traefik
+{ "mode": "auto", "acmeEmail": "admin@example.com" }
+
+# 2. Register your docker app with domain + primaryService
+POST /apps
+{
+  "name": "my-app",
+  "type": "docker",
+  "repoUrl": "git@github.com:you/my-app.git",
+  "deployPath": "/srv/apps/my-app",
+  "domain": "my-app.example.com",
+  "primaryService": "web",
+  "port": 3000
+}
+```
+
+At deploy time the deployer writes `docker-compose.traefik.yml` alongside the app's own `docker-compose.yml` and runs `docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d`. The repo's compose file is never modified.
+
+**Modes:**
+- `standalone` — Traefik owns ports 80/443 with automatic Let's Encrypt TLS
+- `behind-nginx` — Traefik listens on an internal port; nginx proxies to it
+
+### Internal Docker networking
+
+Apps with `internalNetwork: true` (default for docker/compose) are joined to the `deployer-internal` bridge network at deploy time. This lets containers reach each other by service name without exposing ports to the host. The network is created lazily on first deploy.
+
+---
+
+## Self-register and self-update
+
+Register the deployer to manage its own updates:
+
+```bash
+# Register (auto-detects git remote)
+POST /setup/self-register
+
+# Update (git pull → npm install → npm build → migrate → pm2 restart)
+POST /setup/self-update
+```
+
+The deployer restarts itself via PM2 after a successful build. Track progress by polling the returned `deploymentId`.
+
+---
+
+## Metrics and Prometheus
+
+The deployer samples all apps every 30 seconds and stores CPU, memory, and status in SQLite (7-day retention).
+
+```bash
+# Time-series query (last hour by default)
+GET /apps/:appId/metrics?from=2024-01-01T00:00:00Z&to=2024-01-01T01:00:00Z
+
+# Prometheus scrape endpoint (add to prometheus.yml)
+GET /metrics   # Authorization: Bearer <admin-token>
+```
+
+Prometheus config example:
+```yaml
+scrape_configs:
+  - job_name: deployer
+    bearer_token: "your-admin-token"
+    static_configs:
+      - targets: ["localhost:3000"]
+    metrics_path: /metrics
 ```
 
 ---
 
 ## MCP (AI agent integration)
 
-The MCP server runs on the same port at `/mcp` using the Streamable HTTP transport (stateless mode). Point any MCP-compatible client (Claude Desktop, Claude Code, custom agent) at:
+The MCP server runs on the same port at `/mcp` (Streamable HTTP transport). Point Claude Desktop, Claude Code, or any MCP-compatible client at:
 
 ```
 http://localhost:3000/mcp
 ```
 
-Available tools:
+With the same admin token as the REST API.
+
+### Available MCP tools
 
 | Tool | Description |
 |---|---|
-| `register_app` | Register an app and receive its API key |
-| `deploy_app` | Initial deploy with optional env vars |
-| `update_app` | Pull latest code and restart |
-| `rollback_app` | Revert by app name or specific deployment ID |
-| `get_app_status` | Live PM2 or Docker runtime status |
-| `list_apps` | List all registered apps |
+| `list_apps` | List all registered apps; optional `type` filter |
+| `register_app` | Register a new app (all 4 types supported) |
+| `update_app_config` | Patch app settings (branch, domain, nginx, compose content, etc.) |
+| `delete_app` | Delete app record |
+| `get_app_status` | Live PM2 or Docker Compose status with CPU/memory |
+| `get_app_logs` | Tail recent log output (PM2 files or docker compose logs) |
+| `get_app_metrics` | Query historical CPU/memory metrics |
+| `deploy_app` | Initial deployment |
+| `update_app` | Pull latest and restart |
+| `rollback_app` | Roll back to last successful or a specific deployment |
 | `get_deployment` | Poll deployment status by ID |
 | `list_deployments` | Deployment history, optionally filtered by app |
 | `get_deployment_snapshots` | Inspect what a rollback would revert |
-| `run_migrations` | Manually run migrations up or down |
+| `get_app_env_keys` | List stored env var key names |
+| `set_app_env` | Store encrypted env vars |
+| `delete_app_env` | Delete a stored env var |
+| `run_migrations` | Run migrations up or down |
+| `setup_traefik` | Install and configure Traefik |
+| `self_register` | Register the deployer as a managed app |
+| `self_update` | Update the deployer itself |
+
+---
+
+## Reversibility
+
+Every step captures a snapshot before it runs. On failure or explicit rollback, steps are undone in reverse order.
+
+| Step | Snapshot | Rollback action |
+|---|---|---|
+| `git-clone` | repo path | `rm -rf` the directory |
+| `git-pull` | commit hash before pull | `git reset --hard <hash>` |
+| `env-setup` | `.env` contents (AES-256-GCM encrypted) | restore previous file |
+| `database-create` | whether DB was newly created | `DROP DATABASE` + `DROP USER` (requires `allowDbDrop: true`) |
+| `migration-up` | list of files applied | run `.down.sql` files in reverse |
+| `pm2-start` | process name | `pm2 delete <name>` |
+| `pm2-restart` | commit hash + process state | `git reset --hard` + `pm2 restart` |
+| `docker-compose-up` | compose path + service names | `docker compose down` |
+| `nginx-configure` | previous config text | write back + `nginx -s reload` |
+| `npm-build` | — | not reversible (dist/ is overwritten) |
+| `compose-write` | previous file contents | restore previous `docker-compose.yml` |
 
 ---
 
 ## Migration runners
 
-The deployer auto-detects the migration tool used by the deployed app:
+The deployer auto-detects the migration tool used by a deployed app:
 
-| Detection | Runner | Up command | Down command |
+| Detection | Runner | Up | Down |
 |---|---|---|---|
-| `drizzle.config.ts` or `drizzle.config.js` present | Drizzle | `npx drizzle-kit migrate` | Warning only (no built-in rollback) |
-| `prisma/schema.prisma` present | Prisma | `npx prisma migrate deploy` | Warning only (Prisma has no native rollback) |
-| `migrations/` directory present | Raw SQL | Runs `*.sql` files in alphabetical order | Runs matching `*.down.sql` files in reverse |
-
-For raw SQL rollback to work, provide a `.down.sql` file for each `.sql` migration (e.g. `0002_add_users.sql` → `0002_add_users.down.sql`).
-
----
-
-## Concurrency
-
-Only one deployment can run per app at a time. If a deployment is already running, subsequent deploy/update/rollback requests return `409 Conflict`.
+| `drizzle.config.ts` or `.js` | Drizzle Kit | `npx drizzle-kit migrate` | warning (no built-in rollback) |
+| `prisma/schema.prisma` | Prisma | `npx prisma migrate deploy` | warning (no native rollback) |
+| `migrations/` directory | Raw SQL | runs `*.sql` in order | runs matching `*.down.sql` in reverse |
 
 ---
 
 ## Data storage
 
-The deployer stores its own state in a SQLite database (default: `./deployer.db`). Four tables:
+SQLite database (default `./deployer.db`) with six tables:
 
-- `apps` — registered app configs and hashed API keys
-- `deployments` — deployment history with status and git hashes
-- `deployment_snapshots` — per-step snapshots used for rollback
-- `env_files` — encrypted `.env` backups (AES-256-GCM)
+| Table | Contents |
+|---|---|
+| `apps` | App config, hashed API keys |
+| `deployments` | History with status, git hashes, error messages |
+| `deployment_snapshots` | Per-step state for rollback |
+| `env_files` | Encrypted `.env` backups (AES-256-GCM) |
+| `app_env_vars` | Encrypted per-app env vars |
+| `app_metrics` | CPU/memory/status samples (30s interval, 7-day retention) |
 
-The database file is created automatically on first start. Back it up along with `DEPLOYER_ENV_ENCRYPTION_KEY` — the key is required to decrypt `.env` snapshots.
+Back up `deployer.db` and `DEPLOYER_ENV_ENCRYPTION_KEY` together — the key is required to decrypt `.env` snapshots.
+
+---
+
+## Required host tools
+
+The deployer shells out to these tools — they must be in `PATH`:
+
+| Tool | Required when |
+|---|---|
+| `git` | All app types |
+| `pm2` | `node` and `python` apps (bare metal) |
+| `docker`, `docker compose` | `docker` and `compose` apps |
+| `nginx` | `nginxEnabled: true` on any app |
+| `psql` | `dbEnabled: true` on any app |
+
+Target OS: Ubuntu/Debian (nginx paths: `/etc/nginx/sites-available/` + `sites-enabled/`).
