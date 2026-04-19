@@ -1,0 +1,1185 @@
+openapi: 3.0.3
+info:
+  title: Deployer API
+  version: 1.0.0
+  contact:
+    name: Juha Itäleino
+    email: jsilvanus@gmail.com
+  description: |
+    OpenAPI specification generated from the source routes in this repository.
+    Authentication uses a Bearer token: either the admin token (DEPLOYER_ADMIN_TOKEN)
+    or a per-app API key (prefix stored in the app record). Admin-only endpoints
+    require the admin token; many app-scoped endpoints accept an app API key.
+servers:
+  - url: http://localhost:3000
+    description: Local development server (adjust as needed)
+tags:
+  - name: apps
+  - name: deployments
+  - name: health
+  - name: logs
+  - name: metrics
+  - name: schedules
+  - name: setup
+  - name: status
+  - name: version
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+      description: >-
+        Pass `Authorization: Bearer <token>`. Use the admin token for admin
+        endpoints or an app API key for app-scoped endpoints.
+  parameters:
+    appId:
+      name: appId
+      in: path
+      required: true
+      schema:
+        type: string
+    deploymentId:
+      name: deploymentId
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+        version:
+          type: string
+        uptimeSeconds:
+          type: integer
+      required: [status, version, uptimeSeconds]
+
+    App:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [node, python, docker, compose, npm, pypi, image]
+        repoUrl:
+          type: string
+        branch:
+          type: string
+        deployPath:
+          type: string
+        dockerCompose:
+          type: boolean
+        nginxEnabled:
+          type: boolean
+        nginxLocation:
+          type: string
+        domain:
+          type: string
+        dbEnabled:
+          type: boolean
+        dbType:
+          type: string
+          enum: [postgres, sqlite]
+        dbName:
+          type: string
+        primaryService:
+          type: string
+        internalNetwork:
+          type: boolean
+        apiKeyPrefix:
+          type: string
+        port:
+          type: integer
+        packageName:
+          type: string
+        packageVersion:
+          type: string
+        registryUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, name, type, deployPath, internalNetwork, apiKeyPrefix, createdAt, updatedAt]
+
+    CreateAppInput:
+      type: object
+      required: [name, type, deployPath]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [node, python, docker, compose, npm, pypi, image]
+        repoUrl:
+          type: string
+        branch:
+          type: string
+          default: main
+        deployPath:
+          type: string
+        composeContent:
+          type: string
+        primaryService:
+          type: string
+        internalNetwork:
+          type: boolean
+        dockerCompose:
+          type: boolean
+        nginxEnabled:
+          type: boolean
+        nginxLocation:
+          type: string
+        domain:
+          type: string
+        dbEnabled:
+          type: boolean
+        dbType:
+          type: string
+          enum: [postgres, sqlite]
+        dbName:
+          type: string
+        port:
+          type: integer
+        packageName:
+          type: string
+        packageVersion:
+          type: string
+        registryUrl:
+          type: string
+        registryToken:
+          type: string
+        registryUsername:
+          type: string
+
+    UpdateAppInput:
+      type: object
+      properties:
+        composeContent:
+          type: string
+        primaryService:
+          type: string
+        internalNetwork:
+          type: boolean
+        branch:
+          type: string
+        domain:
+          type: string
+        nginxEnabled:
+          type: boolean
+        nginxLocation:
+          type: string
+        dbEnabled:
+          type: boolean
+        dbType:
+          type: string
+          enum: [postgres, sqlite]
+        dbName:
+          type: string
+        port:
+          type: integer
+        packageVersion:
+          type: string
+        registryUrl:
+          type: string
+        registryToken:
+          type: string
+        registryUsername:
+          type: string
+
+    CreateAppResult:
+      type: object
+      properties:
+        app:
+          $ref: '#/components/schemas/App'
+        apiKey:
+          type: string
+        generatedDbPassword:
+          type: string
+
+    Deployment:
+      type: object
+      properties:
+        id:
+          type: string
+        appId:
+          type: string
+        operation:
+          type: string
+          enum: [deploy, update, rollback]
+        status:
+          type: string
+          enum: [pending, running, success, failed, rolled_back]
+        triggeredBy:
+          type: string
+          enum: [api, mcp]
+        gitCommitBefore:
+          type: string
+        gitCommitAfter:
+          type: string
+        errorMessage:
+          type: string
+        currentStep:
+          type: string
+        completedSteps:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+
+    DeploymentSnapshot:
+      type: object
+      properties:
+        id:
+          type: string
+        deploymentId:
+          type: string
+        stepName:
+          type: string
+        stepOrder:
+          type: integer
+        snapshotData:
+          type: object
+          additionalProperties: true
+        reversible:
+          type: boolean
+        reversed:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    DeployRequest:
+      type: object
+      properties:
+        triggeredBy:
+          type: string
+          enum: [api, mcp]
+        allowDbDrop:
+          type: boolean
+        envVars:
+          type: object
+          additionalProperties:
+            type: string
+
+    MigrateRequest:
+      type: object
+      required: [direction]
+      properties:
+        direction:
+          type: string
+          enum: [up, down]
+        steps:
+          type: integer
+
+    LogTailResponse:
+      type: object
+      properties:
+        appId:
+          type: string
+        appName:
+          type: string
+        stdout:
+          type: string
+        stderr:
+          type: string
+
+    MetricsResponse:
+      type: object
+      properties:
+        appId:
+          type: string
+        appName:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        points:
+          type: array
+          items:
+            type: object
+            properties:
+              timestamp:
+                type: integer
+              cpu:
+                type: number
+              memoryMb:
+                type: number
+              status:
+                type: string
+
+    ScheduleInput:
+      type: object
+      required: [appId, type, cron]
+      properties:
+        appId:
+          type: string
+        type:
+          type: string
+        cron:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+
+    ScheduleIdResponse:
+      type: object
+      properties:
+        id:
+          type: string
+
+    StatusResponse:
+      type: object
+      properties:
+        appId:
+          type: string
+        appName:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        pid:
+          type: integer
+        memory:
+          type: number
+        cpu:
+          type: number
+        uptime:
+          type: number
+        services:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              status:
+                type: string
+              pid:
+                type: integer
+              memory:
+                type: number
+              cpu:
+                type: number
+
+    VersionResponse:
+      type: object
+      properties:
+        appId:
+          type: string
+        localVersion:
+          type: string
+        upstream:
+          type: object
+          additionalProperties: true
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Health check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /apps:
+    get:
+      tags: [apps]
+      summary: List all apps (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Array of apps
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/App'
+        '304':
+          description: Not Modified
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden (admin required)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags: [apps]
+      summary: Create a new app (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAppInput'
+      responses:
+        '201':
+          description: App created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAppResult'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    get:
+      tags: [apps]
+      summary: Get app by id (admin or scoped app)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: App object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+        '304':
+          description: Not Modified
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags: [apps]
+      summary: Update app (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAppInput'
+      responses:
+        '200':
+          description: Updated app
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/App'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags: [apps]
+      summary: Delete app (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}/deployments:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    get:
+      tags: [apps]
+      summary: List deployments for an app (admin or scoped)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Array of deployments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Deployment'
+        '404':
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}/env:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    get:
+      tags: [apps]
+      summary: List env keys for an app (admin or scoped)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Env keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  appId:
+                    type: string
+                  keys:
+                    type: array
+                    items:
+                      type: string
+        '404':
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags: [apps]
+      summary: Set multiple env vars for an app (admin or scoped)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties:
+                type: string
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}/env/{key}:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags: [apps]
+      summary: Delete an env var for an app (admin or scoped)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: No Content
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /deployments/{deploymentId}:
+    parameters:
+      - $ref: '#/components/parameters/deploymentId'
+    get:
+      tags: [deployments]
+      summary: Get deployment by id (admin or scoped)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Deployment object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deployment'
+        '304':
+          description: Not Modified
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /deployments/{deploymentId}/snapshots:
+    parameters:
+      - $ref: '#/components/parameters/deploymentId'
+    get:
+      tags: [deployments]
+      summary: Get snapshots for a deployment
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Array of deployment snapshots
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeploymentSnapshot'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}/deploy:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    post:
+      tags: [deployments]
+      summary: Start a deploy for an app (admin or scoped)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeployRequest'
+      responses:
+        '202':
+          description: Deployment started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deploymentId:
+                    type: string
+                  status:
+                    type: string
+                  message:
+                    type: string
+        '404':
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict (running deployment)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}/update:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    post:
+      tags: [deployments]
+      summary: Start an update for an app (admin or scoped)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeployRequest'
+      responses:
+        '202':
+          description: Update started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deploymentId:
+                    type: string
+                  status:
+                    type: string
+                  message:
+                    type: string
+
+  /deployments/{deploymentId}/rollback:
+    parameters:
+      - $ref: '#/components/parameters/deploymentId'
+    post:
+      tags: [deployments]
+      summary: Roll back a finished deployment (admin or scoped)
+      security:
+        - bearerAuth: []
+      responses:
+        '202':
+          description: Rollback started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deploymentId:
+                    type: string
+                  targetDeploymentId:
+                    type: string
+                  status:
+                    type: string
+                  message:
+                    type: string
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}/rollback:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    post:
+      tags: [deployments]
+      summary: Roll back the last successful deployment for an app
+      security:
+        - bearerAuth: []
+      responses:
+        '202':
+          description: Rollback started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deploymentId:
+                    type: string
+                  targetDeploymentId:
+                    type: string
+                  status:
+                    type: string
+                  message:
+                    type: string
+
+  /apps/{appId}/migrations/run:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    post:
+      tags: [deployments]
+      summary: Run migrations for an app (admin or scoped)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MigrateRequest'
+      responses:
+        '200':
+          description: Migrations result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          description: Bad request / no runner detected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}/logs:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    get:
+      tags: [logs]
+      summary: Tail logs for an app (admin or scoped)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: lines
+          schema:
+            type: integer
+            default: 100
+        - in: query
+          name: stderr
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Tail logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogTailResponse'
+        '404':
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}/logs/stream:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    get:
+      tags: [logs]
+      summary: Stream logs for an app (SSE)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Server-sent events stream of log lines
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  /apps/{appId}/metrics:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    get:
+      tags: [metrics]
+      summary: Query historical metrics for an app (admin or scoped)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Metrics time-series
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsResponse'
+        '400':
+          description: Bad request (invalid dates)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /metrics:
+    get:
+      tags: [metrics]
+      summary: Prometheus exposition (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Prometheus metrics exposition format (text/plain)
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /schedules:
+    post:
+      tags: [schedules]
+      summary: Create a schedule (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleInput'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleIdResponse'
+
+    get:
+      tags: [schedules]
+      summary: List schedules (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Array of schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+
+  /schedules/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      tags: [schedules]
+      summary: Delete a schedule (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Deleted
+
+  /schedules/{id}/runs:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [schedules]
+      summary: List runs for a schedule (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Array of runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+
+  /setup/traefik:
+    post:
+      tags: [setup]
+      summary: Create or update Traefik deployment (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum: [auto, standalone, behind-nginx]
+                acmeEmail:
+                  type: string
+                port:
+                  type: integer
+      responses:
+        '202':
+          description: Deployment started
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /setup/self-register:
+    post:
+      tags: [setup]
+      summary: Self-register the deployer as an app (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                repoUrl:
+                  type: string
+                branch:
+                  type: string
+                deployPath:
+                  type: string
+                packageName:
+                  type: string
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  app:
+                    $ref: '#/components/schemas/App'
+                  apiKey:
+                    type: string
+                  message:
+                    type: string
+
+  /setup/self-update:
+    post:
+      tags: [setup]
+      summary: Trigger a self-update of the deployer (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        '202':
+          description: Update started
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /admin/self-shutdown:
+    post:
+      tags: [setup]
+      summary: Self-shutdown the server (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dryRun:
+                  type: boolean
+                deleteInstalled:
+                  type: boolean
+                confirmToken:
+                  type: string
+      responses:
+        '200':
+          description: Result or dry-run plan
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}/status:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    get:
+      tags: [status]
+      summary: Get runtime status for an app (admin or scoped)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Status information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '404':
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}/version:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    get:
+      tags: [version]
+      summary: Get local and upstream versions for an app (admin or scoped)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Version information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+        '404':
+          description: App not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
