@@ -14,14 +14,14 @@ Phase 1 (VersionService + MCP) can be done in parallel with Phase 2.
 
 ---
 
-## Phase 0: Config & Safety
+## Phase 0: Config & Safety ✅ 🔒
 **Mode:** Sequential
 **Depends on:** none
 **Goal:** Add gating and safety controls so destructive features are opt-in and admin-protected.
 
-1. Add config flags and env vars in `src/config.ts` and `.env.example` (e.g. `SCHEDULER_ENABLED`, `VERSION_UPSTREAM_URL`, `ALLOW_SELF_SHUTDOWN`, `ALLOW_SELF_SHUTDOWN_DELETE`) — these gate rollout and destructive operations.
-2. Harden auth: ensure admin-only access for destructive endpoints (update `src/api/plugins/auth.plugin.ts`).
-3. Add operational docs entries and a short runbook note for `self-shutdown` safety.
+- [x] Add config flags and env vars in `src/config.ts` and `.env.example` (e.g. `SCHEDULER_ENABLED`, `VERSION_UPSTREAM_URL`, `ALLOW_SELF_SHUTDOWN`, `ALLOW_SELF_SHUTDOWN_DELETE`) — these gate rollout and destructive operations.
+- [x] Harden auth: ensure admin-only access for destructive endpoints (update `src/api/plugins/auth.plugin.ts`).
+- [x] Add operational docs entries and a short runbook note for `self-shutdown` safety. (scaffolded `POST /admin/self-shutdown` and audit log)
 
 ---
 
@@ -38,6 +38,13 @@ Phase 1 (VersionService + MCP) can be done in parallel with Phase 2.
 3. Register MCP method `check_app_version` in `src/mcp/server.ts` that calls the service.
 4. Add unit and integration tests for service + route; instrument metrics for version checks.
 
+**Status:** ✅ 🔒
+
+- [x] Implement `src/services/version.service.ts` (basic fetch + cache)
+- [x] Add `GET /apps/:appId/version` route in `src/api/routes/version.route.ts`
+- [x] Register MCP tool `check_app_version` in `src/mcp/server.ts`
+- [ ] Add unit/integration tests and metrics (pending)
+
 ---
 
 ## Phase 2: Schedules DB & API
@@ -52,6 +59,14 @@ Phase 1 (VersionService + MCP) can be done in parallel with Phase 2.
 4. Add `src/api/routes/schedules.route.ts` + zod schemas in `src/api/schemas/` for POST/GET/PUT/DELETE.
 5. Register MCP tools: `list_schedules`, `create_schedule`, `delete_schedule` in `src/mcp/server.ts`.
 6. Add tests: migration test, unit tests for service, route integration tests.
+
+**Status:** ✅ 🔒
+
+- [x] Designed Drizzle schema for `schedules` and `shutdown_logs` and added migration `src/db/migrations/0011_schedules.sql`
+- [x] Implemented `src/services/schedule.service.ts` for CRUD and next-run calculation
+- [x] Added `src/api/routes/schedules.route.ts` + MCP tools `registerScheduleTools`
+- [x] Wired `SchedulerService` to start when `SCHEDULER_ENABLED=true`
+- [ ] Add tests and leader-election/DB-locking for multi-instance safety (pending)
 
 ---
 

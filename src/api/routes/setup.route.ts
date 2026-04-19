@@ -239,4 +239,38 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
       message:      'Self-update started — deployer will restart after build completes',
     });
   });
+
+  // ── Self-shutdown (admin only) ───────────────────────────────────────────
+  fastify.post('/admin/self-shutdown', {
+    schema: {
+      body: {
+        type: 'object',
+        properties: {
+          dryRun: { type: 'boolean' },
+          deleteInstalled: { type: 'boolean' },
+          confirmToken: { type: 'string' },
+        },
+        additionalProperties: false,
+      },
+    },
+  }, async (request, reply) => {
+    if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
+    const body = request.body as { dryRun?: boolean; deleteInstalled?: boolean; confirmToken?: string };
+    if (!opts.config.allowSelfShutdown) return reply.code(403).send({ error: 'Self-shutdown is disabled by configuration' });
+    if (body.deleteInstalled && !opts.config.allowSelfShutdownDelete) return reply.code(403).send({ error: 'Self-shutdown delete is disabled by configuration' });
+
+    const svc = new (await import('../../services/self-shutdown.service.js')).SelfShutdownService(opts.db, opts.config, fastify.log);
+    if (body.dryRun) {
+      const plan = await svc.dryRun();
+      return reply.code(200).send({ dryRun: true, plan });
+    }
+
+    // require a confirmToken string match to avoid accidental execution
+    if (!body.confirmToken || body.confirmToken.length < 8) {
+      return reply.code(400).send({ error: 'confirmToken required (min 8 chars) for non-dry-run' });
+    }
+
+    const result = await svc.execute({ deleteInstalled: Boolean(body.deleteInstalled), initiatedBy: 'admin' });
+    return reply.code(200).send({ result });
+  });
 }

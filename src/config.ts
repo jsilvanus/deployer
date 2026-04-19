@@ -7,6 +7,11 @@ const configSchema = z.object({
   allowedDeployPaths:    z.string().default('/srv/apps'),
   dbPath:                z.string().default('./deployer.db'),
   corsOrigins:           z.string().optional(),
+  // Feature gating and safety flags
+  schedulerEnabled:      z.coerce.boolean().default(false),
+  versionUpstreamUrl:    z.string().url().optional(),
+  allowSelfShutdown:     z.coerce.boolean().default(false),
+  allowSelfShutdownDelete: z.coerce.boolean().default(false),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -19,6 +24,10 @@ export function loadConfig(): Config {
     allowedDeployPaths: process.env['DEPLOYER_ALLOWED_DEPLOY_PATHS'],
     dbPath:             process.env['DEPLOYER_DB_PATH'],
     corsOrigins:        process.env['DEPLOYER_CORS_ORIGINS'],
+    schedulerEnabled:   process.env['SCHEDULER_ENABLED'],
+    versionUpstreamUrl: process.env['VERSION_UPSTREAM_URL'],
+    allowSelfShutdown:  process.env['ALLOW_SELF_SHUTDOWN'],
+    allowSelfShutdownDelete: process.env['ALLOW_SELF_SHUTDOWN_DELETE'],
   });
 
   if (!result.success) {

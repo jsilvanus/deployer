@@ -98,5 +98,29 @@ export const appMetrics = sqliteTable('app_metrics', {
   memoryMb:  real('memory_mb'),
 });
 
+export const schedules = sqliteTable('schedules', {
+  id:           text('id').primaryKey(),
+  appId:        text('app_id').notNull().references(() => apps.id),
+  type:         text('type').notNull(), // deploy | stop | delete | update | self-update | self-shutdown
+  payload:      text('payload').notNull().default('{}'), // JSON
+  cron:         text('cron').notNull(),
+  timezone:     text('timezone').notNull().default('UTC'),
+  nextRun:      integer('next_run', { mode: 'timestamp' }),
+  enabled:      integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  retryPolicy:  text('retry_policy').notNull().default('{}'),
+  createdBy:    text('created_by'),
+  createdAt:    integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt:    integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const shutdownLogs = sqliteTable('shutdown_logs', {
+  id:            text('id').primaryKey(),
+  initiatedBy:   text('initiated_by'),
+  dryRun:        integer('dry_run', { mode: 'boolean' }).notNull().default(false),
+  deleted:       integer('deleted', { mode: 'boolean' }).notNull().default(false),
+  details:       text('details').notNull(),
+  createdAt:     integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 export type AppMetricRow = typeof appMetrics.$inferSelect;
 export type NewAppMetricRow = typeof appMetrics.$inferInsert;

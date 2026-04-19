@@ -754,3 +754,82 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
 
   return server;
 }
+
+// Register auxiliary tools by default
+export function createAndRegisterMcpServer(db: Db, config: Config, logger: AnyLogger) {
+  const server = createMcpServer(db, config, logger);
+  try {
+    // attempt to register helper tools
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { registerVersionTool } = require('./server.js');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { registerScheduleTools } = require('./server.js');
+    // register with server
+    if (typeof registerVersionTool === 'function') registerVersionTool(server, db, config, logger);
+    if (typeof registerScheduleTools === 'function') registerScheduleTools(server, db);
+  } catch {
+    // ignore failures to auto-register
+  }
+  return server;
+}
+
+// Auto-register small tools if module consumer wants them
+// Note: callers can also call registerVersionTool/registerScheduleTools explicitly
+export { registerVersionTool, registerScheduleTools };
+
+// Schedule tools
+export function registerScheduleTools(server: any, db: any) {
+  const ScheduleService = require('../services/schedule.service.js').ScheduleService;
+  const svc = new ScheduleService(db);
+
+  server.tool(
+    'list_schedules',
+    'List persisted schedules',
+    {},
+    async () => {
+      const list = await svc.listAll();
+      return { content: [{ type: 'text', text: JSON.stringify(list, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'create_schedule',
+    'Create a schedule',
+    { app_name: require('zod').z.string(), type: require('zod').z.string(), cron: require('zod').z.string() },
+    async ({ app_name, type, cron }: { app_name: string; type: string; cron: string }) => {
+      // map app_name -> app id
+      const AppService = require('../services/app.service.js').AppService;
+      const appSvc = new AppService(db, '');
+      const app = await appSvc.findByName(app_name);
+      if (!app) return { content: [{ type: 'text', text: `App "${app_name}" not found` }] };
+      const id = await svc.create({ appId: app.id, type, cron, createdBy: 'mcp' });
+      return { content: [{ type: 'text', text: JSON.stringify({ id }, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    'delete_schedule',
+    'Delete a schedule by id',
+    { id: require('zod').z.string() },
+    async ({ id }: { id: string }) => {
+      await svc.delete(id);
+      return { content: [{ type: 'text', text: `Deleted ${id}` }] };
+    },
+  );
+}
+
+// Add lightweight version check tool at end for MCP consumers
+export function registerVersionTool(server: typeof import('@modelcontextprotocol/sdk/server/mcp.js').McpServer, db: any, config: any, logger: any) {
+  const VersionService = require('../services/version.service.js').VersionService;
+  server.tool(
+    'check_app_version',
+    'Check local and upstream version for an app',
+    { app_name: require('zod').z.string() },
+    async ({ app_name }: { app_name: string }) => {
+      const svc = new VersionService(db, config.versionUpstreamUrl);
+      const local = await svc.getLocalVersion(app_name);
+      const upstream = await svc.getUpstreamLatest(app_name);
+      return { content: [{ type: 'text', text: JSON.stringify({ app: app_name, local, upstream }, null, 2) }] };
+    },
+  );
+}

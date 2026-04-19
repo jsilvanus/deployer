@@ -20,6 +20,27 @@ async function authPlugin(
   fastify.decorateRequest('isAdmin', false);
   fastify.decorateRequest('scopedAppId', undefined);
 
+  // Allow routes to declare `config: { adminOnly: true }` to require admin token
+  fastify.addHook('onRoute', (routeOptions: any) => {
+    const adminOnly = routeOptions?.config?.adminOnly;
+    if (!adminOnly) return;
+
+    const origPre = routeOptions.preHandler;
+    routeOptions.preHandler = async function (request: any, reply: any) {
+      if (!request.isAdmin) {
+        return reply.code(403).send({ error: 'Admin token required' });
+      }
+
+      if (!origPre) return;
+
+      if (Array.isArray(origPre)) {
+        for (const fn of origPre) await fn.call(this, request, reply);
+      } else {
+        await origPre.call(this, request, reply);
+      }
+    };
+  });
+
   fastify.addHook('onRequest', async (request, reply) => {
     // Skip auth for health check
     if (request.routeOptions.url === '/health') return;
