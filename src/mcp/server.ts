@@ -27,6 +27,8 @@ import { updatePythonPlan } from '../core/plans/update-python.plan.js';
 import { updateDeployerPlan } from '../core/plans/update-deployer.plan.js';
 import { deployNpmPlan } from '../core/plans/deploy-npm.plan.js';
 import { updateNpmPlan } from '../core/plans/update-npm.plan.js';
+import { deployPypiPlan } from '../core/plans/deploy-pypi.plan.js';
+import { updatePypiPlan } from '../core/plans/update-pypi.plan.js';
 import { TraefikService, type TraefikMode } from '../services/traefik.service.js';
 import { resolve } from 'node:path';
 
@@ -63,7 +65,7 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
   server.tool(
     'list_apps',
     'List all registered applications and their API key prefixes',
-    { status: z.string().optional().describe('Filter by type: node, python, docker, compose, or npm') },
+    { status: z.string().optional().describe('Filter by type: node, python, docker, compose, npm, or pypi') },
     async ({ status }) => {
       const apps = await appSvc.list();
       const filtered = status ? apps.filter(a => a.type === status) : apps;
@@ -77,7 +79,7 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
     'Register a new application (does not deploy it)',
     {
       name:           z.string().min(1).describe('App name (lowercase, hyphens allowed)'),
-      type:           z.enum(['node', 'python', 'docker', 'compose', 'npm']).describe('App runtime type'),
+      type:           z.enum(['node', 'python', 'docker', 'compose', 'npm', 'pypi']).describe('App runtime type'),
       repoUrl:        z.string().optional().describe('Git repository URL (required for node, python, docker)'),
       branch:         z.string().default('main').describe('Git branch'),
       deployPath:     z.string().describe('Absolute path on server, e.g. /srv/apps/myapp'),
@@ -90,8 +92,8 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
       dbEnabled:      z.boolean().default(false),
       dbName:         z.string().optional(),
       port:           z.number().int().min(1).max(65535).optional().describe('App port for nginx proxy'),
-      packageName:    z.string().optional().describe('npm package name, e.g. @scope/pkg (required for npm type)'),
-      packageVersion: z.string().optional().describe('npm package version or tag, e.g. latest, 1.2.3 (default: latest)'),
+      packageName:    z.string().optional().describe('Package name for npm/pypi types, e.g. @scope/pkg or gunicorn'),
+      packageVersion: z.string().optional().describe('Package version: npm tag or semver (e.g. latest, 1.2.3), or PyPI version (e.g. 23.0.0)'),
     },
     async (input) => {
       const createInput: import('../types/index.js').CreateAppInput = {
@@ -315,6 +317,7 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
                  : app.type === 'docker'  ? deployDockerPlan
                  : app.type === 'python'  ? deployPythonPlan
                  : app.type === 'npm'     ? deployNpmPlan
+                 : app.type === 'pypi'    ? deployPypiPlan
                  : deployNodePlan;
       const options: Record<string, unknown> = {
         allowDbDrop: allow_db_drop,
@@ -363,6 +366,7 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
                  : app.type === 'docker'  ? updateDockerPlan
                  : app.type === 'python'  ? updatePythonPlan
                  : app.type === 'npm'     ? updateNpmPlan
+                 : app.type === 'pypi'    ? updatePypiPlan
                  : updateNodePlan;
       const options: Record<string, unknown> = {
         allowDbDrop: allow_db_drop,

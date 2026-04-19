@@ -3,7 +3,7 @@ export const createAppBody = {
   required: ['name', 'type', 'deployPath'],
   properties: {
     name:           { type: 'string', minLength: 1, maxLength: 64, pattern: '^[a-z0-9-]+$' },
-    type:           { type: 'string', enum: ['node', 'python', 'docker', 'compose', 'npm'] },
+    type:           { type: 'string', enum: ['node', 'python', 'docker', 'compose', 'npm', 'pypi'] },
     repoUrl:        { type: 'string', minLength: 1 },
     branch:         { type: 'string', minLength: 1, default: 'main' },
     deployPath:     { type: 'string', minLength: 1 },

@@ -91,7 +91,7 @@ export class AppService {
         pgPort:         input.pgPort,
         pgAdminUser:    input.pgAdminUser,
         primaryService:  input.primaryService,
-        internalNetwork: (input.type === 'node' || input.type === 'python' || input.type === 'npm')
+        internalNetwork: (input.type === 'node' || input.type === 'python' || input.type === 'npm' || input.type === 'pypi')
           ? false
           : (input.internalNetwork ?? true),
         port:            input.port,
