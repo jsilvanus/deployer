@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { mkdir, rm, access } from 'node:fs/promises';
 import { execa } from 'execa';
 import type { DeploymentStep } from '../orchestrator.js';
+import { AppEnvService } from '../../services/app-env.service.js';
 
 interface PypiInstallSnapshot {
   packageName: string;
@@ -48,8 +49,23 @@ export const pypiInstallPackageStep: DeploymentStep = {
     const version = ctx.app.packageVersion;
     const packageSpec = version && version !== 'latest' ? `${packageName}==${version}` : packageName;
 
+    const envSvc = new AppEnvService(ctx.db, ctx.config.envEncryptionKey);
+    const token    = await envSvc.get(ctx.app.id, '_REGISTRY_TOKEN');
+    const username = await envSvc.get(ctx.app.id, '_REGISTRY_USERNAME');
+    const registry = ctx.app.registryUrl;
+
+    const extraArgs: string[] = [];
+    if (registry) {
+      const indexUrl = new URL(registry);
+      if (token) {
+        indexUrl.username = username ?? '__token__';
+        indexUrl.password = token;
+      }
+      extraArgs.push('--extra-index-url', indexUrl.toString());
+    }
+
     ctx.logger.info({ packageSpec }, 'pip install');
-    await execa(pip, ['install', '--upgrade', packageSpec]);
+    await execa(pip, ['install', '--upgrade', ...extraArgs, packageSpec]);
   },
 
   async rollback(ctx, snapshot): Promise<void> {

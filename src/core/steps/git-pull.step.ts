@@ -1,6 +1,7 @@
 import type { DeploymentStep } from '../orchestrator.js';
 import type { StepContext } from '../../types/index.js';
 import { GitService } from '../../services/git.service.js';
+import { AppEnvService } from '../../services/app-env.service.js';
 import type { GitPullSnapshotData } from '../../types/snapshot.js';
 
 export const gitPullStep: DeploymentStep = {
@@ -20,7 +21,10 @@ export const gitPullStep: DeploymentStep = {
 
   async execute(ctx: StepContext): Promise<void> {
     const git = new GitService(ctx.logger);
-    await git.pull(ctx.app.deployPath);
+    const envSvc = new AppEnvService(ctx.db, ctx.config.envEncryptionKey);
+    const token    = await envSvc.get(ctx.app.id, '_REGISTRY_TOKEN') ?? undefined;
+    const username = await envSvc.get(ctx.app.id, '_REGISTRY_USERNAME') ?? undefined;
+    await git.pull(ctx.app.deployPath, token ? { token, username } : undefined);
   },
 
   async rollback(ctx: StepContext, snapshot: Record<string, unknown>): Promise<void> {

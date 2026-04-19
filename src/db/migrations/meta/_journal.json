@@ -71,6 +71,13 @@
       "when": 1776560000000,
       "tag": "0009_npm_app_type",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1776570000000,
+      "tag": "0010_registry_url",
+      "breakpoints": true
     }
   ]
 }

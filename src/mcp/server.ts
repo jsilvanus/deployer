@@ -94,8 +94,11 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
       dbEnabled:      z.boolean().default(false),
       dbName:         z.string().optional(),
       port:           z.number().int().min(1).max(65535).optional().describe('App port for nginx proxy'),
-      packageName:    z.string().optional().describe('Package/image name: npm (@scope/pkg), PyPI (gunicorn), or Docker image (nginx, ghcr.io/org/app)'),
-      packageVersion: z.string().optional().describe('Version/tag: npm (latest, 1.2.3), PyPI (23.0.0), or Docker image tag (latest, sha-abc123)'),
+      packageName:      z.string().optional().describe('Package/image name: npm (@scope/pkg), PyPI (gunicorn), or Docker image (nginx, ghcr.io/org/app)'),
+      packageVersion:   z.string().optional().describe('Version/tag: npm (latest, 1.2.3), PyPI (23.0.0), or Docker image tag (latest, sha-abc123)'),
+      registryUrl:      z.string().optional().describe('Registry/index URL: npm (https://npm.pkg.github.com), PyPI index (https://pypi.example.com/simple/), Docker registry hostname (ghcr.io), or omit for git'),
+      registryToken:    z.string().optional().describe('Auth token/password for the registry (stored encrypted, never returned)'),
+      registryUsername: z.string().optional().describe('Username for the registry (stored encrypted, never returned)'),
     },
     async (input) => {
       const createInput: import('../types/index.js').CreateAppInput = {
@@ -113,8 +116,11 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
         ...(input.domain         !== undefined ? { domain:         input.domain         } : {}),
         ...(input.dbName         !== undefined ? { dbName:         input.dbName         } : {}),
         ...(input.port           !== undefined ? { port:           input.port           } : {}),
-        ...(input.packageName    !== undefined ? { packageName:    input.packageName    } : {}),
-        ...(input.packageVersion !== undefined ? { packageVersion: input.packageVersion } : {}),
+        ...(input.packageName      !== undefined ? { packageName:      input.packageName      } : {}),
+        ...(input.packageVersion   !== undefined ? { packageVersion:   input.packageVersion   } : {}),
+        ...(input.registryUrl      !== undefined ? { registryUrl:      input.registryUrl      } : {}),
+        ...(input.registryToken    !== undefined ? { registryToken:    input.registryToken    } : {}),
+        ...(input.registryUsername !== undefined ? { registryUsername: input.registryUsername } : {}),
       };
       const result = await appSvc.create(createInput);
       return {
@@ -142,22 +148,30 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
       nginxLocation:  z.string().optional().describe('Nginx location block path'),
       dbEnabled:      z.boolean().optional().describe('Enable database'),
       dbName:         z.string().optional().describe('Database name'),
-      composeContent: z.string().optional().describe('Updated Docker Compose file content'),
-      primaryService: z.string().optional().describe('Primary service name in compose file'),
+      composeContent:   z.string().optional().describe('Updated Docker Compose file content'),
+      primaryService:   z.string().optional().describe('Primary service name in compose file'),
+      packageVersion:   z.string().optional().describe('New package/image version or tag to deploy'),
+      registryUrl:      z.string().optional().describe('Registry/index URL'),
+      registryToken:    z.string().optional().describe('Auth token/password for the registry (stored encrypted)'),
+      registryUsername: z.string().optional().describe('Username for the registry (stored encrypted)'),
     },
     async ({ app_name, ...updates }) => {
       const app = await appSvc.findByName(app_name);
       if (!app) return { content: [{ type: 'text', text: `App "${app_name}" not found` }] };
 
       const updateInput: import('../types/index.js').UpdateAppInput = {};
-      if (updates.branch         !== undefined) updateInput.branch         = updates.branch;
-      if (updates.domain         !== undefined) updateInput.domain         = updates.domain;
-      if (updates.nginxEnabled   !== undefined) updateInput.nginxEnabled   = updates.nginxEnabled;
-      if (updates.nginxLocation  !== undefined) updateInput.nginxLocation  = updates.nginxLocation;
-      if (updates.dbEnabled      !== undefined) updateInput.dbEnabled      = updates.dbEnabled;
-      if (updates.dbName         !== undefined) updateInput.dbName         = updates.dbName;
-      if (updates.composeContent !== undefined) updateInput.composeContent = updates.composeContent;
-      if (updates.primaryService !== undefined) updateInput.primaryService = updates.primaryService;
+      if (updates.branch           !== undefined) updateInput.branch           = updates.branch;
+      if (updates.domain           !== undefined) updateInput.domain           = updates.domain;
+      if (updates.nginxEnabled     !== undefined) updateInput.nginxEnabled     = updates.nginxEnabled;
+      if (updates.nginxLocation    !== undefined) updateInput.nginxLocation    = updates.nginxLocation;
+      if (updates.dbEnabled        !== undefined) updateInput.dbEnabled        = updates.dbEnabled;
+      if (updates.dbName           !== undefined) updateInput.dbName           = updates.dbName;
+      if (updates.composeContent   !== undefined) updateInput.composeContent   = updates.composeContent;
+      if (updates.primaryService   !== undefined) updateInput.primaryService   = updates.primaryService;
+      if (updates.packageVersion   !== undefined) updateInput.packageVersion   = updates.packageVersion;
+      if (updates.registryUrl      !== undefined) updateInput.registryUrl      = updates.registryUrl;
+      if (updates.registryToken    !== undefined) updateInput.registryToken    = updates.registryToken;
+      if (updates.registryUsername !== undefined) updateInput.registryUsername = updates.registryUsername;
 
       const updated = await appSvc.update(app.id, updateInput);
       if (!updated) return { content: [{ type: 'text', text: 'Update failed' }] };

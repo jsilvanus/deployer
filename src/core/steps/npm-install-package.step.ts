@@ -1,7 +1,8 @@
 import { join } from 'node:path';
-import { mkdir, rm, readFile } from 'node:fs/promises';
+import { mkdir, rm, readFile, writeFile, unlink } from 'node:fs/promises';
 import { execa } from 'execa';
 import type { DeploymentStep } from '../orchestrator.js';
+import { AppEnvService } from '../../services/app-env.service.js';
 
 interface NpmInstallSnapshot {
   packageName: string;
@@ -31,12 +32,30 @@ export const npmInstallPackageStep: DeploymentStep = {
 
     await mkdir(ctx.app.deployPath, { recursive: true });
 
+    const envSvc = new AppEnvService(ctx.db, ctx.config.envEncryptionKey);
+    const token    = await envSvc.get(ctx.app.id, '_REGISTRY_TOKEN');
+    const registry = ctx.app.registryUrl;
+
+    let npmrcPath: string | null = null;
+    if (token || registry) {
+      const reg = registry ?? 'https://registry.npmjs.org/';
+      const regHost = new URL(reg).host;
+      const lines = [`registry=${reg}`];
+      if (token) lines.push(`//${regHost}/:_authToken=${token}`);
+      npmrcPath = join(ctx.app.deployPath, '.npmrc');
+      await writeFile(npmrcPath, lines.join('\n') + '\n');
+    }
+
     const version = ctx.app.packageVersion ?? 'latest';
     const packageSpec = `${packageName}@${version}`;
     ctx.logger.info({ packageSpec, deployPath: ctx.app.deployPath }, 'npm install package');
-    await execa('npm', ['install', '--prefix', ctx.app.deployPath, packageSpec], {
-      cwd: ctx.app.deployPath,
-    });
+    try {
+      await execa('npm', ['install', '--prefix', ctx.app.deployPath, packageSpec], {
+        cwd: ctx.app.deployPath,
+      });
+    } finally {
+      if (npmrcPath) await unlink(npmrcPath).catch(() => undefined);
+    }
   },
 
   async rollback(ctx, snapshot): Promise<void> {

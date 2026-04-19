@@ -35,6 +35,7 @@ function rowToApp(row: typeof apps.$inferSelect): App {
     ...(row.port           != null ? { port:           row.port           } : {}),
     ...(row.packageName    != null ? { packageName:    row.packageName    } : {}),
     ...(row.packageVersion != null ? { packageVersion: row.packageVersion } : {}),
+    ...(row.registryUrl    != null ? { registryUrl:    row.registryUrl    } : {}),
   };
 }
 
@@ -97,6 +98,7 @@ export class AppService {
         port:            input.port,
         packageName:     input.packageName,
         packageVersion:  input.packageVersion,
+        registryUrl:     input.registryUrl,
         apiKeyHash,
         apiKeyPrefix,
         createdAt:     now,
@@ -138,6 +140,12 @@ export class AppService {
     if (input.composeContent) {
       await envSvc.set(app.id, '_COMPOSE_CONTENT', input.composeContent);
     }
+    if (input.registryToken) {
+      await envSvc.set(app.id, '_REGISTRY_TOKEN', input.registryToken);
+    }
+    if (input.registryUsername) {
+      await envSvc.set(app.id, '_REGISTRY_USERNAME', input.registryUsername);
+    }
 
     return {
       app,
@@ -170,7 +178,7 @@ export class AppService {
     const location     = input.nginxLocation ?? existing.nginxLocation;
     await this.assertNginxUnique(domain, location, nginxEnabled, id);
 
-    const { pgAdminPassword, composeContent, internalNetwork: rawInternalNetwork, packageVersion, ...otherDbFields } = input;
+    const { pgAdminPassword, composeContent, internalNetwork: rawInternalNetwork, packageVersion, registryToken, registryUsername, ...otherDbFields } = input;
     const isDockerApp = existing.type === 'docker' || existing.type === 'compose';
     const dbFields = {
       ...otherDbFields,
@@ -184,6 +192,12 @@ export class AppService {
     }
     if (composeContent) {
       await envSvc.set(id, '_COMPOSE_CONTENT', composeContent);
+    }
+    if (registryToken) {
+      await envSvc.set(id, '_REGISTRY_TOKEN', registryToken);
+    }
+    if (registryUsername) {
+      await envSvc.set(id, '_REGISTRY_USERNAME', registryUsername);
     }
 
     const updatedAt = new Date();

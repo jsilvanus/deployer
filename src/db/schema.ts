@@ -24,6 +24,7 @@ export const apps = sqliteTable('apps', {
   port:            integer('port'),
   packageName:     text('package_name'),
   packageVersion:  text('package_version'),
+  registryUrl:     text('registry_url'),
   createdAt:       integer('created_at', { mode: 'timestamp' }).notNull(),
   updatedAt:       integer('updated_at', { mode: 'timestamp' }).notNull(),
 });

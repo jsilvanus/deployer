@@ -1,17 +1,33 @@
 import { execa } from 'execa';
 import type { AnyLogger } from '../types/logger.js';
 
+export interface GitCredentials {
+  token?: string;
+  username?: string;
+}
+
 export class GitService {
   constructor(private logger: AnyLogger) {}
 
-  async clone(repoUrl: string, targetPath: string, branch: string): Promise<void> {
-    this.logger.info({ repoUrl, targetPath, branch }, 'git clone');
-    await execa('git', ['clone', '--branch', branch, '--depth', '1', repoUrl, targetPath]);
+  private credentialArgs(creds: GitCredentials): string[] {
+    if (!creds.token) return [];
+    if (creds.username) {
+      const encoded = Buffer.from(`${creds.username}:${creds.token}`).toString('base64');
+      return ['-c', `http.extraHeader=Authorization: Basic ${encoded}`];
+    }
+    return ['-c', `http.extraHeader=Authorization: Bearer ${creds.token}`];
   }
 
-  async pull(repoPath: string): Promise<void> {
+  async clone(repoUrl: string, targetPath: string, branch: string, creds?: GitCredentials): Promise<void> {
+    this.logger.info({ repoUrl, targetPath, branch }, 'git clone');
+    const credArgs = creds ? this.credentialArgs(creds) : [];
+    await execa('git', [...credArgs, 'clone', '--branch', branch, '--depth', '1', repoUrl, targetPath]);
+  }
+
+  async pull(repoPath: string, creds?: GitCredentials): Promise<void> {
     this.logger.info({ repoPath }, 'git pull');
-    await execa('git', ['pull'], { cwd: repoPath });
+    const credArgs = creds ? this.credentialArgs(creds) : [];
+    await execa('git', [...credArgs, 'pull'], { cwd: repoPath });
   }
 
   async getCurrentHash(repoPath: string): Promise<string> {

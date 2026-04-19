@@ -24,6 +24,7 @@ export interface App {
   port?: number;
   packageName?: string;
   packageVersion?: string;
+  registryUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -51,6 +52,9 @@ export interface CreateAppInput {
   port?: number;
   packageName?: string;
   packageVersion?: string;
+  registryUrl?: string;
+  registryToken?: string;
+  registryUsername?: string;
 }
 
 export interface UpdateAppInput {
@@ -69,6 +73,9 @@ export interface UpdateAppInput {
   primaryService?: string;
   internalNetwork?: boolean;
   packageVersion?: string;
+  registryUrl?: string;
+  registryToken?: string;
+  registryUsername?: string;
 }
 
 export interface CreateAppResult {
