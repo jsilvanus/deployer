@@ -25,6 +25,12 @@ import { updateComposePlan } from '../core/plans/update-compose.plan.js';
 import { deployPythonPlan } from '../core/plans/deploy-python.plan.js';
 import { updatePythonPlan } from '../core/plans/update-python.plan.js';
 import { updateDeployerPlan } from '../core/plans/update-deployer.plan.js';
+import { deployNpmPlan } from '../core/plans/deploy-npm.plan.js';
+import { updateNpmPlan } from '../core/plans/update-npm.plan.js';
+import { deployPypiPlan } from '../core/plans/deploy-pypi.plan.js';
+import { updatePypiPlan } from '../core/plans/update-pypi.plan.js';
+import { deployImagePlan } from '../core/plans/deploy-image.plan.js';
+import { updateImagePlan } from '../core/plans/update-image.plan.js';
 import { TraefikService, type TraefikMode } from '../services/traefik.service.js';
 import { resolve } from 'node:path';
 
@@ -61,7 +67,7 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
   server.tool(
     'list_apps',
     'List all registered applications and their API key prefixes',
-    { status: z.string().optional().describe('Filter by type: node, python, docker, or compose') },
+    { status: z.string().optional().describe('Filter by type: node, python, docker, compose, npm, pypi, or image') },
     async ({ status }) => {
       const apps = await appSvc.list();
       const filtered = status ? apps.filter(a => a.type === status) : apps;
@@ -75,7 +81,7 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
     'Register a new application (does not deploy it)',
     {
       name:           z.string().min(1).describe('App name (lowercase, hyphens allowed)'),
-      type:           z.enum(['node', 'python', 'docker', 'compose']).describe('App runtime type'),
+      type:           z.enum(['node', 'python', 'docker', 'compose', 'npm', 'pypi', 'image']).describe('App runtime type'),
       repoUrl:        z.string().optional().describe('Git repository URL (required for node, python, docker)'),
       branch:         z.string().default('main').describe('Git branch'),
       deployPath:     z.string().describe('Absolute path on server, e.g. /srv/apps/myapp'),
@@ -88,6 +94,11 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
       dbEnabled:      z.boolean().default(false),
       dbName:         z.string().optional(),
       port:           z.number().int().min(1).max(65535).optional().describe('App port for nginx proxy'),
+      packageName:      z.string().optional().describe('Package/image name: npm (@scope/pkg), PyPI (gunicorn), or Docker image (nginx, ghcr.io/org/app)'),
+      packageVersion:   z.string().optional().describe('Version/tag: npm (latest, 1.2.3), PyPI (23.0.0), or Docker image tag (latest, sha-abc123)'),
+      registryUrl:      z.string().optional().describe('Registry/index URL: npm (https://npm.pkg.github.com), PyPI index (https://pypi.example.com/simple/), Docker registry hostname (ghcr.io), or omit for git'),
+      registryToken:    z.string().optional().describe('Auth token/password for the registry (stored encrypted, never returned)'),
+      registryUsername: z.string().optional().describe('Username for the registry (stored encrypted, never returned)'),
     },
     async (input) => {
       const createInput: import('../types/index.js').CreateAppInput = {
@@ -105,6 +116,11 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
         ...(input.domain         !== undefined ? { domain:         input.domain         } : {}),
         ...(input.dbName         !== undefined ? { dbName:         input.dbName         } : {}),
         ...(input.port           !== undefined ? { port:           input.port           } : {}),
+        ...(input.packageName      !== undefined ? { packageName:      input.packageName      } : {}),
+        ...(input.packageVersion   !== undefined ? { packageVersion:   input.packageVersion   } : {}),
+        ...(input.registryUrl      !== undefined ? { registryUrl:      input.registryUrl      } : {}),
+        ...(input.registryToken    !== undefined ? { registryToken:    input.registryToken    } : {}),
+        ...(input.registryUsername !== undefined ? { registryUsername: input.registryUsername } : {}),
       };
       const result = await appSvc.create(createInput);
       return {
@@ -132,22 +148,30 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
       nginxLocation:  z.string().optional().describe('Nginx location block path'),
       dbEnabled:      z.boolean().optional().describe('Enable database'),
       dbName:         z.string().optional().describe('Database name'),
-      composeContent: z.string().optional().describe('Updated Docker Compose file content'),
-      primaryService: z.string().optional().describe('Primary service name in compose file'),
+      composeContent:   z.string().optional().describe('Updated Docker Compose file content'),
+      primaryService:   z.string().optional().describe('Primary service name in compose file'),
+      packageVersion:   z.string().optional().describe('New package/image version or tag to deploy'),
+      registryUrl:      z.string().optional().describe('Registry/index URL'),
+      registryToken:    z.string().optional().describe('Auth token/password for the registry (stored encrypted)'),
+      registryUsername: z.string().optional().describe('Username for the registry (stored encrypted)'),
     },
     async ({ app_name, ...updates }) => {
       const app = await appSvc.findByName(app_name);
       if (!app) return { content: [{ type: 'text', text: `App "${app_name}" not found` }] };
 
       const updateInput: import('../types/index.js').UpdateAppInput = {};
-      if (updates.branch         !== undefined) updateInput.branch         = updates.branch;
-      if (updates.domain         !== undefined) updateInput.domain         = updates.domain;
-      if (updates.nginxEnabled   !== undefined) updateInput.nginxEnabled   = updates.nginxEnabled;
-      if (updates.nginxLocation  !== undefined) updateInput.nginxLocation  = updates.nginxLocation;
-      if (updates.dbEnabled      !== undefined) updateInput.dbEnabled      = updates.dbEnabled;
-      if (updates.dbName         !== undefined) updateInput.dbName         = updates.dbName;
-      if (updates.composeContent !== undefined) updateInput.composeContent = updates.composeContent;
-      if (updates.primaryService !== undefined) updateInput.primaryService = updates.primaryService;
+      if (updates.branch           !== undefined) updateInput.branch           = updates.branch;
+      if (updates.domain           !== undefined) updateInput.domain           = updates.domain;
+      if (updates.nginxEnabled     !== undefined) updateInput.nginxEnabled     = updates.nginxEnabled;
+      if (updates.nginxLocation    !== undefined) updateInput.nginxLocation    = updates.nginxLocation;
+      if (updates.dbEnabled        !== undefined) updateInput.dbEnabled        = updates.dbEnabled;
+      if (updates.dbName           !== undefined) updateInput.dbName           = updates.dbName;
+      if (updates.composeContent   !== undefined) updateInput.composeContent   = updates.composeContent;
+      if (updates.primaryService   !== undefined) updateInput.primaryService   = updates.primaryService;
+      if (updates.packageVersion   !== undefined) updateInput.packageVersion   = updates.packageVersion;
+      if (updates.registryUrl      !== undefined) updateInput.registryUrl      = updates.registryUrl;
+      if (updates.registryToken    !== undefined) updateInput.registryToken    = updates.registryToken;
+      if (updates.registryUsername !== undefined) updateInput.registryUsername = updates.registryUsername;
 
       const updated = await appSvc.update(app.id, updateInput);
       if (!updated) return { content: [{ type: 'text', text: 'Update failed' }] };
@@ -308,6 +332,9 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
       const plan = app.type === 'compose' ? deployComposePlan
                  : app.type === 'docker'  ? deployDockerPlan
                  : app.type === 'python'  ? deployPythonPlan
+                 : app.type === 'npm'     ? deployNpmPlan
+                 : app.type === 'pypi'    ? deployPypiPlan
+                 : app.type === 'image'   ? deployImagePlan
                  : deployNodePlan;
       const options: Record<string, unknown> = {
         allowDbDrop: allow_db_drop,
@@ -355,6 +382,9 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
       const plan = app.type === 'compose' ? updateComposePlan
                  : app.type === 'docker'  ? updateDockerPlan
                  : app.type === 'python'  ? updatePythonPlan
+                 : app.type === 'npm'     ? updateNpmPlan
+                 : app.type === 'pypi'    ? updatePypiPlan
+                 : app.type === 'image'   ? updateImagePlan
                  : updateNodePlan;
       const options: Record<string, unknown> = {
         allowDbDrop: allow_db_drop,
@@ -643,12 +673,13 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
     'self_register',
     'Register the deployer itself as a managed app (enables self_update). Auto-detects repo URL from git remote if not supplied.',
     {
-      name:        z.string().default('deployer').describe('App name to register under'),
-      repo_url:    z.string().optional().describe('Git repo URL (auto-detected from git remote if omitted)'),
-      branch:      z.string().default('main'),
-      deploy_path: z.string().optional().describe('Deploy path (defaults to current working directory)'),
+      name:         z.string().default('deployer').describe('App name to register under'),
+      repo_url:     z.string().optional().describe('Git repo URL (auto-detected from git remote if omitted)'),
+      branch:       z.string().default('main'),
+      deploy_path:  z.string().optional().describe('Deploy path (defaults to current working directory)'),
+      package_name: z.string().optional().describe('npm package name if npm-installed (e.g. @jsilvanus/deployer)'),
     },
-    async ({ name, repo_url, branch, deploy_path }) => {
+    async ({ name, repo_url, branch, deploy_path, package_name }) => {
       const existing = await appSvc.findByName(name);
       if (existing) {
         return { content: [{ type: 'text', text: JSON.stringify({ app: existing, message: 'Already registered' }, null, 2) }] };
@@ -660,12 +691,16 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
         try {
           const { stdout } = await execa('git', ['remote', 'get-url', 'origin'], { cwd: deployPath });
           repoUrl = stdout.trim();
-        } catch {
-          return { content: [{ type: 'text', text: 'Could not detect repo URL — provide repo_url or set git remote origin' }] };
-        }
+        } catch { /* no git remote — register as npm type */ }
       }
 
-      const result = await appSvc.create({ name, type: 'node', repoUrl, branch, deployPath });
+      let result;
+      if (repoUrl) {
+        result = await appSvc.create({ name, type: 'node', repoUrl, branch, deployPath });
+      } else {
+        const packageName = package_name ?? '@jsilvanus/deployer';
+        result = await appSvc.create({ name, type: 'npm', deployPath, packageName, packageVersion: 'latest' });
+      }
       return {
         content: [{
           type: 'text',
@@ -683,7 +718,7 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
   // ── self_update ────────────────────────────────────────────────────────────
   server.tool(
     'self_update',
-    'Update the deployer itself: git pull, npm install, npm run build, run migrations, pm2 restart.',
+    'Update the deployer itself: git pull + build (git-installed) or npm install (npm-installed), run migrations, pm2 restart.',
     {
       name: z.string().default('deployer').describe('App name used when self-registering'),
     },
@@ -697,8 +732,9 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
       }
 
       const deployment = await deploymentSvc.create(app.id, 'update', 'mcp');
+      const selfUpdatePlan = app.type === 'npm' ? updateNpmPlan : updateDeployerPlan;
       setImmediate(() => {
-        orchestrator.run(app, deployment.id, updateDeployerPlan, {}).catch((err: unknown) => {
+        orchestrator.run(app, deployment.id, selfUpdatePlan, {}).catch((err: unknown) => {
           logger.error({ err, deploymentId: deployment.id }, 'MCP self-update failed');
         });
       });

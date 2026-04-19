@@ -11,6 +11,7 @@ import { NginxService } from '../../services/nginx.service.js';
 import { deployComposePlan } from '../../core/plans/deploy-compose.plan.js';
 import { updateComposePlan } from '../../core/plans/update-compose.plan.js';
 import { updateDeployerPlan } from '../../core/plans/update-deployer.plan.js';
+import { updateNpmPlan } from '../../core/plans/update-npm.plan.js';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
 import type { LastModifiedCache } from '../../cache/last-modified.cache.js';
@@ -140,10 +141,11 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
       body: {
         type: 'object',
         properties: {
-          name:       { type: 'string' },
-          repoUrl:    { type: 'string' },
-          branch:     { type: 'string' },
-          deployPath: { type: 'string' },
+          name:        { type: 'string' },
+          repoUrl:     { type: 'string' },
+          branch:      { type: 'string' },
+          deployPath:  { type: 'string' },
+          packageName: { type: 'string' },
         },
         additionalProperties: false,
       },
@@ -156,6 +158,7 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
       repoUrl?: string;
       branch?: string;
       deployPath?: string;
+      packageName?: string;
     };
 
     const name       = body.name       ?? 'deployer';
@@ -173,14 +176,17 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
       try {
         const { stdout } = await execa('git', ['remote', 'get-url', 'origin'], { cwd: deployPath });
         repoUrl = stdout.trim();
-      } catch {
-        return reply.code(400).send({
-          error: 'Could not detect repo URL — provide repoUrl in the body or set the git remote',
-        });
-      }
+      } catch { /* no git remote — register as npm type below */ }
     }
 
-    const result = await appSvc.create({ name, type: 'node', repoUrl, branch, deployPath });
+    let result;
+    if (repoUrl) {
+      result = await appSvc.create({ name, type: 'node', repoUrl, branch, deployPath });
+    } else {
+      const packageName = body.packageName ?? '@jsilvanus/deployer';
+      result = await appSvc.create({ name, type: 'npm', deployPath, packageName, packageVersion: 'latest' });
+    }
+
     return reply.code(201).send({
       app:     result.app,
       apiKey:  result.apiKey,
@@ -219,9 +225,10 @@ export async function setupRoutes(fastify: FastifyInstance, opts: { db: Db; conf
     }
 
     const deployment = await deploymentSvc.create(app.id, 'update', 'api');
+    const selfUpdatePlan = app.type === 'npm' ? updateNpmPlan : updateDeployerPlan;
 
     setImmediate(() => {
-      orchestrator.run(app, deployment.id, updateDeployerPlan, {}).catch((err: unknown) => {
+      orchestrator.run(app, deployment.id, selfUpdatePlan, {}).catch((err: unknown) => {
         fastify.log.error({ err, deploymentId: deployment.id }, 'Self-update failed');
       });
     });

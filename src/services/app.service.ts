@@ -33,6 +33,9 @@ function rowToApp(row: typeof apps.$inferSelect): App {
     ...(row.primaryService != null ? { primaryService: row.primaryService } : {}),
     internalNetwork: row.internalNetwork,
     ...(row.port           != null ? { port:           row.port           } : {}),
+    ...(row.packageName    != null ? { packageName:    row.packageName    } : {}),
+    ...(row.packageVersion != null ? { packageVersion: row.packageVersion } : {}),
+    ...(row.registryUrl    != null ? { registryUrl:    row.registryUrl    } : {}),
   };
 }
 
@@ -88,11 +91,14 @@ export class AppService {
         pgHost:         input.pgHost,
         pgPort:         input.pgPort,
         pgAdminUser:    input.pgAdminUser,
-        primaryService:  input.primaryService,
-        internalNetwork: (input.type === 'node' || input.type === 'python')
+        primaryService:  input.primaryService ?? (input.type === 'image' ? 'app' : undefined),
+        internalNetwork: (input.type === 'node' || input.type === 'python' || input.type === 'npm' || input.type === 'pypi')
           ? false
           : (input.internalNetwork ?? true),
         port:            input.port,
+        packageName:     input.packageName,
+        packageVersion:  input.packageVersion,
+        registryUrl:     input.registryUrl,
         apiKeyHash,
         apiKeyPrefix,
         createdAt:     now,
@@ -134,6 +140,12 @@ export class AppService {
     if (input.composeContent) {
       await envSvc.set(app.id, '_COMPOSE_CONTENT', input.composeContent);
     }
+    if (input.registryToken) {
+      await envSvc.set(app.id, '_REGISTRY_TOKEN', input.registryToken);
+    }
+    if (input.registryUsername) {
+      await envSvc.set(app.id, '_REGISTRY_USERNAME', input.registryUsername);
+    }
 
     return {
       app,
@@ -166,11 +178,13 @@ export class AppService {
     const location     = input.nginxLocation ?? existing.nginxLocation;
     await this.assertNginxUnique(domain, location, nginxEnabled, id);
 
-    const { pgAdminPassword, composeContent, internalNetwork: rawInternalNetwork, ...otherDbFields } = input;
+    const { pgAdminPassword, composeContent, internalNetwork: rawInternalNetwork, packageVersion, registryToken, registryUsername, ...otherDbFields } = input;
     const isDockerApp = existing.type === 'docker' || existing.type === 'compose';
-    const dbFields = isDockerApp
-      ? { ...otherDbFields, internalNetwork: rawInternalNetwork }
-      : otherDbFields;
+    const dbFields = {
+      ...otherDbFields,
+      ...(isDockerApp && rawInternalNetwork !== undefined ? { internalNetwork: rawInternalNetwork } : {}),
+      ...(packageVersion !== undefined ? { packageVersion } : {}),
+    };
     const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
 
     if (pgAdminPassword) {
@@ -178,6 +192,12 @@ export class AppService {
     }
     if (composeContent) {
       await envSvc.set(id, '_COMPOSE_CONTENT', composeContent);
+    }
+    if (registryToken) {
+      await envSvc.set(id, '_REGISTRY_TOKEN', registryToken);
+    }
+    if (registryUsername) {
+      await envSvc.set(id, '_REGISTRY_USERNAME', registryUsername);
     }
 
     const updatedAt = new Date();
