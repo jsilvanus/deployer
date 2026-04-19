@@ -64,6 +64,13 @@
       "when": 1776550000000,
       "tag": "0008_app_metrics",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1776560000000,
+      "tag": "0009_npm_app_type",
+      "breakpoints": true
     }
   ]
 }

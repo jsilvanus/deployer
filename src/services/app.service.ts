@@ -33,6 +33,8 @@ function rowToApp(row: typeof apps.$inferSelect): App {
     ...(row.primaryService != null ? { primaryService: row.primaryService } : {}),
     internalNetwork: row.internalNetwork,
     ...(row.port           != null ? { port:           row.port           } : {}),
+    ...(row.packageName    != null ? { packageName:    row.packageName    } : {}),
+    ...(row.packageVersion != null ? { packageVersion: row.packageVersion } : {}),
   };
 }
 
@@ -89,10 +91,12 @@ export class AppService {
         pgPort:         input.pgPort,
         pgAdminUser:    input.pgAdminUser,
         primaryService:  input.primaryService,
-        internalNetwork: (input.type === 'node' || input.type === 'python')
+        internalNetwork: (input.type === 'node' || input.type === 'python' || input.type === 'npm')
           ? false
           : (input.internalNetwork ?? true),
         port:            input.port,
+        packageName:     input.packageName,
+        packageVersion:  input.packageVersion,
         apiKeyHash,
         apiKeyPrefix,
         createdAt:     now,
@@ -166,11 +170,13 @@ export class AppService {
     const location     = input.nginxLocation ?? existing.nginxLocation;
     await this.assertNginxUnique(domain, location, nginxEnabled, id);
 
-    const { pgAdminPassword, composeContent, internalNetwork: rawInternalNetwork, ...otherDbFields } = input;
+    const { pgAdminPassword, composeContent, internalNetwork: rawInternalNetwork, packageVersion, ...otherDbFields } = input;
     const isDockerApp = existing.type === 'docker' || existing.type === 'compose';
-    const dbFields = isDockerApp
-      ? { ...otherDbFields, internalNetwork: rawInternalNetwork }
-      : otherDbFields;
+    const dbFields = {
+      ...otherDbFields,
+      ...(isDockerApp && rawInternalNetwork !== undefined ? { internalNetwork: rawInternalNetwork } : {}),
+      ...(packageVersion !== undefined ? { packageVersion } : {}),
+    };
     const envSvc = new AppEnvService(this.db, this.encryptionKeyHex);
 
     if (pgAdminPassword) {

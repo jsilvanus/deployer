@@ -46,10 +46,21 @@ export const pm2StartStep: DeploymentStep = {
   async execute(ctx: StepContext): Promise<void> {
     const pm2 = new Pm2Service(ctx.logger);
     const isPython = ctx.app.type === 'python';
+    const isNpm    = ctx.app.type === 'npm';
 
-    const script = isPython
-      ? await detectPythonScript(ctx.app.deployPath)
-      : await detectNodeScript(ctx.app.deployPath);
+    let script: string;
+    if (isNpm) {
+      const packageName = ctx.app.packageName;
+      if (!packageName) throw new Error('packageName is required for npm app type');
+      const installedPkgJson = join(ctx.app.deployPath, 'node_modules', packageName, 'package.json');
+      const raw = await readFile(installedPkgJson, 'utf8');
+      const pkg = JSON.parse(raw) as { main?: string };
+      script = join('node_modules', packageName, pkg.main ?? 'index.js');
+    } else if (isPython) {
+      script = await detectPythonScript(ctx.app.deployPath);
+    } else {
+      script = await detectNodeScript(ctx.app.deployPath);
+    }
 
     const interpreter = isPython
       ? await detectPythonInterpreter(ctx.app.deployPath)

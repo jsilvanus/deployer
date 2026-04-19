@@ -1,4 +1,4 @@
-export type AppType = 'node' | 'python' | 'docker' | 'compose';
+export type AppType = 'node' | 'python' | 'docker' | 'compose' | 'npm';
 export type DbType = 'postgres' | 'sqlite';
 
 export interface App {
@@ -22,6 +22,8 @@ export interface App {
   internalNetwork: boolean;
   apiKeyPrefix: string;
   port?: number;
+  packageName?: string;
+  packageVersion?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,6 +49,8 @@ export interface CreateAppInput {
   primaryService?: string;
   internalNetwork?: boolean;
   port?: number;
+  packageName?: string;
+  packageVersion?: string;
 }
 
 export interface UpdateAppInput {
@@ -64,6 +68,7 @@ export interface UpdateAppInput {
   pgAdminPassword?: string;
   primaryService?: string;
   internalNetwork?: boolean;
+  packageVersion?: string;
 }
 
 export interface CreateAppResult {

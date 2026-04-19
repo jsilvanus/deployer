@@ -21,9 +21,11 @@ export const apps = sqliteTable('apps', {
   internalNetwork: integer('internal_network', { mode: 'boolean' }).notNull().default(true),
   apiKeyHash:     text('api_key_hash').notNull(),
   apiKeyPrefix:   text('api_key_prefix').notNull(),
-  port:           integer('port'),
-  createdAt:      integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt:      integer('updated_at', { mode: 'timestamp' }).notNull(),
+  port:            integer('port'),
+  packageName:     text('package_name'),
+  packageVersion:  text('package_version'),
+  createdAt:       integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt:       integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
 export const deployments = sqliteTable('deployments', {
