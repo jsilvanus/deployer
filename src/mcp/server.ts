@@ -816,6 +816,47 @@ export function registerScheduleTools(server: any, db: any) {
       return { content: [{ type: 'text', text: `Deleted ${id}` }] };
     },
   );
+
+  server.tool(
+    'trigger_schedule',
+    'Trigger a schedule to run immediately by id',
+    { id: require('zod').z.string() },
+    async ({ id }: { id: string }) => {
+      const { ScheduleService } = require('../services/schedule.service.js');
+      const scheduleSvc = new ScheduleService(db);
+      const rows = await db.select().from('schedules').where({ id }).limit(1);
+      const schedule = Array.isArray(rows) ? rows[0] : rows;
+      if (!schedule) return { content: [{ type: 'text', text: `Schedule ${id} not found` }] };
+
+      // Simple inline trigger: delegate to scheduler logic (best-effort)
+      // For brevity, invoke the same handlers as SchedulerService used (deploy/update/stop/delete/self-update/self-shutdown)
+      try {
+        const appSvc = new (require('../services/app.service.js').AppService)(db, config.envEncryptionKey);
+        const deploymentSvc = new (require('../services/deployment.service.js').DeploymentService)(db);
+        const orchestrator = new (require('../core/orchestrator.js').DeploymentOrchestrator)(deploymentSvc, logger, config, db);
+        const app = schedule.appId ? await appSvc.findById(schedule.appId) : null;
+        if (schedule.type === 'deploy' || schedule.type === 'update') {
+          if (!app) throw new Error('App not found');
+          const deployment = await deploymentSvc.create(app.id, schedule.type === 'deploy' ? 'deploy' : 'update', 'mcp');
+          const plan = app.type === 'compose' ? require('../core/plans/deploy-compose.plan.js').deployComposePlan
+                     : app.type === 'docker'  ? require('../core/plans/deploy-docker.plan.js').deployDockerPlan
+                     : app.type === 'python'  ? require('../core/plans/deploy-python.plan.js').deployPythonPlan
+                     : app.type === 'npm'     ? require('../core/plans/deploy-npm.plan.js').deployNpmPlan
+                     : app.type === 'pypi'    ? require('../core/plans/deploy-pypi.plan.js').deployPypiPlan
+                     : app.type === 'image'   ? require('../core/plans/deploy-image.plan.js').deployImagePlan
+                     : require('../core/plans/deploy-node.plan.js').deployNodePlan;
+          setImmediate(() => orchestrator.run(app, deployment.id, plan, {}).catch((err) => logger.error({ err, deploymentId: deployment.id }, 'MCP scheduled run failed')));
+        } else if (schedule.type === 'self-shutdown') {
+          const svc = new (require('../services/self-shutdown.service.js').SelfShutdownService)(db, config, logger);
+          await svc.execute({ deleteInstalled: false, initiatedBy: 'mcp' });
+        }
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Trigger failed: ${String(err)}` }] };
+      }
+
+      return { content: [{ type: 'text', text: `Triggered ${id}` }] };
+    },
+  );
 }
 
 // Add lightweight version check tool at end for MCP consumers

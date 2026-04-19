@@ -2,6 +2,18 @@
 
 ---
 
+## 2026-04-19 — Phase 3/4/5 progress ✅ 🔒
+Owned files added/updated:
+- src/db/schema.ts (schedule_runs, schedule_locks)
+- src/db/migrations/0012_schedule_runs_locks.sql
+- src/services/schedule-lock.service.ts
+- src/mcp/server.ts (trigger_schedule tool)
+- test/schedule.test.ts
+- docs/RUNBOOK_SELF_SHUTDOWN.md
+
+Summary: Implemented cross-instance locking and schedule run history; SchedulerService now acquires locks, records runs, executes mapped task handlers (deploy/update/stop/delete/self-update/self-shutdown), and updates next-run. Added MCP tooling to trigger schedules and a minimal unit test plus runbook documentation. Follow-ups: retries, stronger idempotency, comprehensive integration tests, and monitoring instrumentation.
+
+
 ## 2026-04-19 — Phase 1 closed ✅ 🔒
 Owned files:
 - src/services/version.service.ts

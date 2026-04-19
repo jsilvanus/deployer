@@ -26,6 +26,13 @@ export async function schedulesRoutes(fastify: FastifyInstance, opts: { db: Db; 
     await svc.delete(id);
     return reply.code(204).send();
   });
+
+  fastify.get('/schedules/:id/runs', async (request, reply) => {
+    if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
+    const { id } = request.params as any;
+    const rows = await opts.db.select().from((await import('../../db/schema.js')).scheduleRuns).where((r) => r.scheduleId.eq(id));
+    return rows;
+  });
 }
 
 export default schedulesRoutes;

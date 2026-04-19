@@ -100,7 +100,7 @@ export const appMetrics = sqliteTable('app_metrics', {
 
 export const schedules = sqliteTable('schedules', {
   id:           text('id').primaryKey(),
-  appId:        text('app_id').notNull().references(() => apps.id),
+  appId:        text('app_id').references(() => apps.id),
   type:         text('type').notNull(), // deploy | stop | delete | update | self-update | self-shutdown
   payload:      text('payload').notNull().default('{}'), // JSON
   cron:         text('cron').notNull(),
@@ -120,6 +120,21 @@ export const shutdownLogs = sqliteTable('shutdown_logs', {
   deleted:       integer('deleted', { mode: 'boolean' }).notNull().default(false),
   details:       text('details').notNull(),
   createdAt:     integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const scheduleRuns = sqliteTable('schedule_runs', {
+  id:         text('id').primaryKey(),
+  scheduleId: text('schedule_id').notNull().references(() => schedules.id),
+  status:     text('status').notNull(), // pending | running | success | failed
+  startedAt:  integer('started_at', { mode: 'timestamp' }).notNull(),
+  finishedAt: integer('finished_at', { mode: 'timestamp' }),
+  details:    text('details').notNull(),
+});
+
+export const scheduleLocks = sqliteTable('schedule_locks', {
+  scheduleId: text('schedule_id').primaryKey().references(() => schedules.id),
+  owner:      text('owner').notNull(),
+  expiresAt:  integer('expires_at', { mode: 'timestamp' }).notNull(),
 });
 
 export type AppMetricRow = typeof appMetrics.$inferSelect;

@@ -1,5 +1,6 @@
 import { setTimeout as wait } from 'node:timers/promises';
 import { ScheduleService } from './schedule.service.js';
+import { ScheduleLockService } from './schedule-lock.service.js';
 import { DeploymentService } from './deployment.service.js';
 import { AppService } from './app.service.js';
 import { DeploymentOrchestrator } from '../core/orchestrator.js';
@@ -29,6 +30,7 @@ export class SchedulerService {
 
   private async loop() {
     const scheduleSvc = new ScheduleService(this.db);
+    const lockSvc = new ScheduleLockService(this.db);
     const deploymentSvc = new DeploymentService(this.db);
     const appSvc = new AppService(this.db, this.config.envEncryptionKey);
     const orchestrator = new DeploymentOrchestrator(deploymentSvc, this.logger, this.config, this.db);
@@ -37,28 +39,89 @@ export class SchedulerService {
       try {
         const due = await scheduleSvc.listForDue(new Date());
         for (const s of due) {
-          this.logger.info({ scheduleId: s.id }, 'Running scheduled task');
-          const app = await appSvc.findById(s.appId);
-          if (!app) continue;
+          this.logger.info({ scheduleId: s.id, type: s.type }, 'Evaluating scheduled task');
+          // Acquire lock to avoid duplicate execution across instances
+          const lock = await lockSvc.tryAcquire(s.id);
+          if (!lock.acquired) {
+            this.logger.info({ scheduleId: s.id }, 'Skipping — lock held by another instance');
+            continue;
+          }
+          const owner = lock.owner;
 
-          // Only implement deploy/update/stop/delete mapping for now
-          if (s.type === 'deploy' || s.type === 'update') {
-            if (await deploymentSvc.hasRunningDeployment(app.id)) continue;
-            const deployment = await deploymentSvc.create(app.id, s.type === 'deploy' ? 'deploy' : 'update', 'scheduler');
-            const plan = app.type === 'compose' ? deployComposePlan
-                       : app.type === 'docker'  ? deployDockerPlan
-                       : app.type === 'python'  ? deployPythonPlan
-                       : app.type === 'npm'     ? deployNpmPlan
-                       : app.type === 'pypi'    ? deployPypiPlan
-                       : app.type === 'image'   ? deployImagePlan
-                       : deployNodePlan;
-            setImmediate(() => orchestrator.run(app, deployment.id, plan, {}).catch((err: unknown) => this.logger.error({ err, deploymentId: deployment.id }, 'Scheduled run failed')));
+          // record run start
+          const runId = await this.db.insert((await import('../db/schema.js')).scheduleRuns).values({
+            id: require('crypto').randomUUID(),
+            scheduleId: s.id,
+            status: 'running',
+            startedAt: Math.floor(Date.now() / 1000),
+            details: '{}',
+          }).then(r => r[0]?.id ?? null).catch(() => null);
+
+          try {
+            const app = s.appId ? await appSvc.findById(s.appId) : null;
+            if (s.type === 'deploy' || s.type === 'update') {
+              if (!app) throw new Error('App not found');
+              if (await deploymentSvc.hasRunningDeployment(app.id)) throw new Error('Deployment already running');
+              const deployment = await deploymentSvc.create(app.id, s.type === 'deploy' ? 'deploy' : 'update', 'scheduler');
+              const plan = app.type === 'compose' ? deployComposePlan
+                         : app.type === 'docker'  ? deployDockerPlan
+                         : app.type === 'python'  ? deployPythonPlan
+                         : app.type === 'npm'     ? deployNpmPlan
+                         : app.type === 'pypi'    ? deployPypiPlan
+                         : app.type === 'image'   ? deployImagePlan
+                         : deployNodePlan;
+              setImmediate(() => orchestrator.run(app, deployment.id, plan, {}).catch((err: unknown) => this.logger.error({ err, deploymentId: deployment.id }, 'Scheduled run failed')));
+            } else if (s.type === 'stop') {
+              if (!app) throw new Error('App not found');
+              if (app.type === 'node' || app.type === 'python') {
+                const pm2 = new (await import('./pm2.service.js')).Pm2Service(this.logger);
+                await pm2.stop(app.name);
+              } else {
+                const docker = new (await import('./docker.service.js')).DockerService(this.logger);
+                await docker.composeDown(app.deployPath).catch(() => {});
+              }
+            } else if (s.type === 'delete') {
+              if (!app) throw new Error('App not found');
+              // stop then delete app record and files
+              if (app.type === 'node' || app.type === 'python') {
+                const pm2 = new (await import('./pm2.service.js')).Pm2Service(this.logger);
+                await pm2.delete(app.name).catch(() => {});
+              } else {
+                const docker = new (await import('./docker.service.js')).DockerService(this.logger);
+                await docker.composeDown(app.deployPath).catch(() => {});
+              }
+              // delete files
+              try { await (await import('node:fs/promises')).rm(app.deployPath, { recursive: true, force: true }); } catch {}
+              await (await import('./app.service.js')).AppService.prototype.delete.call(new (await import('./app.service.js')).AppService(this.db, this.config.envEncryptionKey), app.id);
+            } else if (s.type === 'self-update') {
+              // trigger deployer self-update via orchestrator if registered
+              const appName = 'deployer';
+              const app = await appSvc.findByName ? await appSvc.findByName(appName) : null;
+              if (app) {
+                const deployment = await deploymentSvc.create(app.id, 'update', 'scheduler');
+                const selfUpdatePlan = app.type === 'npm' ? (await import('../core/plans/update-npm.plan.js')).updateNpmPlan : (await import('../core/plans/update-deployer.plan.js')).updateDeployerPlan;
+                setImmediate(() => orchestrator.run(app, deployment.id, selfUpdatePlan, {}).catch((err: unknown) => this.logger.error({ err, deploymentId: deployment.id }, 'Scheduled self-update failed')));
+              }
+            } else if (s.type === 'self-shutdown') {
+              const svc = new (await import('./self-shutdown.service.js')).SelfShutdownService(this.db, this.config, this.logger);
+              await svc.execute({ deleteInstalled: false, initiatedBy: 'scheduler' });
+            }
+
+            // mark run success
+            if (runId) await this.db.update((await import('../db/schema.js')).scheduleRuns).set({ status: 'success', finishedAt: Math.floor(Date.now() / 1000), details: '{}' }).where((r) => r.id.eq(runId));
+
+          } catch (err) {
+            this.logger.error({ err, scheduleId: s.id }, 'Scheduled task failed');
+            if (runId) await this.db.update((await import('../db/schema.js')).scheduleRuns).set({ status: 'failed', finishedAt: Math.floor(Date.now() / 1000), details: String(err) }).where((r) => r.id.eq(runId));
+          } finally {
             // update nextRun for this schedule
             try {
               await scheduleSvc.updateNextRun(s.id);
             } catch (err) {
               this.logger.warn({ err, scheduleId: s.id }, 'Failed to update nextRun for schedule');
             }
+            // release lock
+            try { await lockSvc.release(s.id, owner); } catch {}
           }
         }
       } catch (err) {

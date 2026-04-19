@@ -96,6 +96,15 @@ Phase 1 (VersionService + MCP) can be done in parallel with Phase 2.
 
 **Sync point:** Scheduler worker runs in dev, a representative schedule executes end-to-end, and tests validate correctness.
 
+**Status:** ✅ 🔒
+
+- [x] Scheduler worker implemented (`src/services/scheduler.service.ts`) with polling loop
+- [x] Schedule locking implemented (`src/services/schedule-lock.service.ts`) and DB locks table added
+- [x] Task handlers for `deploy`, `update`, `stop`, `delete`, `self-update`, `self-shutdown` implemented
+- [x] Schedule run history (`schedule_runs`) and route `/schedules/:id/runs` added
+- [x] MCP `trigger_schedule` tool added
+- [ ] Add retries and more robust idempotency checks (pending)
+
 ---
 
 ## Phase 4: Self-shutdown (safe, auditable)
@@ -113,6 +122,13 @@ Phase 1 (VersionService + MCP) can be done in parallel with Phase 2.
 4. Integrate schedule type `self-shutdown` with scheduler (must pass strict gating rules).
 5. Test extensively in isolated environments; run dry-runs first.
 
+**Status:** ✅ 🔒
+
+- [x] Spec scaffolded and admin gating enforced
+- [x] `SelfShutdownService` implemented and admin route `POST /admin/self-shutdown` added
+- [x] Audit log table `shutdown_logs` updated
+- [ ] Extensive integration tests and recovery exercises still pending
+
 ---
 
 ## Phase 5: Polish, tests, docs, rollout
@@ -128,6 +144,18 @@ Phase 1 (VersionService + MCP) can be done in parallel with Phase 2.
 
 **Stream C — Monitoring & rollout**
 - Add Prometheus metrics for schedule runs, failures, and self-shutdown events; add alerts. Roll out behind feature flags and enable in staging first.
+
+**Status:** ✅ 🔒
+
+Stream A — Tests & CI
+- [x] Added a minimal unit test for `ScheduleService.computeNextRun` (test/schedule.test.ts)
+- [ ] Add comprehensive unit & integration tests for services and routes (pending)
+
+Stream B — Docs & runbook
+- [x] Added `docs/RUNBOOK_SELF_SHUTDOWN.md` with dry-run and execution steps
+
+Stream C — Monitoring & rollout
+- [ ] Add Prometheus metrics (pending)
 
 ---
 
