@@ -78,7 +78,7 @@ export const dockerComposeUpStep: DeploymentStep = {
     const envFile = join(ctx.app.deployPath, '.env');
     const overrideFiles: string[] = [];
 
-    if (ctx.app.type === 'docker' || ctx.app.type === 'compose') {
+    if (ctx.app.type === 'docker' || ctx.app.type === 'compose' || ctx.app.type === 'image') {
       const traefik = await buildTraefikOverride(ctx);
       if (traefik) overrideFiles.push(traefik);
     }

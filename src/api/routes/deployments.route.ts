@@ -21,6 +21,8 @@ import { deployNpmPlan } from '../../core/plans/deploy-npm.plan.js';
 import { updateNpmPlan } from '../../core/plans/update-npm.plan.js';
 import { deployPypiPlan } from '../../core/plans/deploy-pypi.plan.js';
 import { updatePypiPlan } from '../../core/plans/update-pypi.plan.js';
+import { deployImagePlan } from '../../core/plans/deploy-image.plan.js';
+import { updateImagePlan } from '../../core/plans/update-image.plan.js';
 
 const truncSec = (d: Date) => Math.floor(d.getTime() / 1000);
 
@@ -104,6 +106,7 @@ export async function deploymentsRoutes(
                : app.type === 'python'  ? deployPythonPlan
                : app.type === 'npm'     ? deployNpmPlan
                : app.type === 'pypi'    ? deployPypiPlan
+               : app.type === 'image'   ? deployImagePlan
                : deployNodePlan;
     const options: Record<string, unknown> = {
       allowDbDrop: body.allowDbDrop ?? false,
@@ -148,6 +151,7 @@ export async function deploymentsRoutes(
                : app.type === 'python'  ? updatePythonPlan
                : app.type === 'npm'     ? updateNpmPlan
                : app.type === 'pypi'    ? updatePypiPlan
+               : app.type === 'image'   ? updateImagePlan
                : updateNodePlan;
     const options: Record<string, unknown> = {
       allowDbDrop: body.allowDbDrop ?? false,
