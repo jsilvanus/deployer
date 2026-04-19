@@ -6,8 +6,11 @@ type CacheEntry = { value: unknown; fetchedAt: number };
 
 export class VersionService {
   private cache = new Map<string, CacheEntry>();
+  private cacheTtlMs: number;
 
-  constructor(private db: Db, private upstreamUrl?: string) {}
+  constructor(private db: Db, private upstreamUrl?: string, cacheTtlMs = 60 * 1000) {
+    this.cacheTtlMs = cacheTtlMs;
+  }
 
   async getLocalVersion(appId: string): Promise<string | null> {
     const row = await this.db.select().from('apps' as any).where({ id: appId }).limit(1);
@@ -16,12 +19,15 @@ export class VersionService {
     if (!app) return null;
     return app.packageVersion ?? null;
   }
-
   async getUpstreamLatest(key: string): Promise<{ version: string } | null> {
+    return this.getLatest(key, false);
+  }
+
+  async getLatest(key: string, refresh = false): Promise<{ version: string } | null> {
     if (!this.upstreamUrl) return null;
     const cacheKey = `upstream:${key}`;
     const cached = this.cache.get(cacheKey);
-    if (cached && Date.now() - cached.fetchedAt < 60 * 1000) {
+    if (!refresh && cached && Date.now() - cached.fetchedAt < this.cacheTtlMs) {
       return cached.value as { version: string };
     }
 

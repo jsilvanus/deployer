@@ -40,6 +40,10 @@ export class ScheduleService {
     return this.db.select().from(schedules);
   }
 
+  async listForApp(appId: string) {
+    return this.db.select().from(schedules).where((s) => s.appId.eq(appId));
+  }
+
   async delete(id: string) {
     await this.db.delete(schedules).where(eq(schedules.id, id));
   }

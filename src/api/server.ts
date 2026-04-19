@@ -14,6 +14,10 @@ import { metricsRoutes } from './routes/metrics.route.js';
 import { setupRoutes } from './routes/setup.route.js';
 import { versionRoutes } from './routes/version.route.js';
 import { schedulesRoutes } from './routes/schedules.route.js';
+import { registryRoutes } from './routes/registry.route.js';
+import { shutdownRoutes } from './routes/shutdown.route.js';
+import { cacheRoutes } from './routes/cache.route.js';
+import { appSchedulesRoutes } from './routes/app-schedules.route.js';
 import { SchedulerService } from '../services/scheduler.service.js';
 import { MetricsService } from '../services/metrics.service.js';
 import { createMcpServer, createAndRegisterMcpServer } from '../mcp/server.js';
@@ -46,6 +50,10 @@ export async function createServer(config: Config, db: Db): Promise<FastifyInsta
   await fastify.register(setupRoutes, { db, config, cache });
   await fastify.register(versionRoutes, { db, config });
   await fastify.register(schedulesRoutes, { db, config });
+  await fastify.register(registryRoutes, { db, config });
+  await fastify.register(shutdownRoutes, { db, config });
+  await fastify.register(cacheRoutes, { db, config });
+  await fastify.register(appSchedulesRoutes, { db, config });
 
   // Start metrics poller after server is ready; stop on close
   fastify.addHook('onReady', async () => {

@@ -12,6 +12,8 @@ const configSchema = z.object({
   versionUpstreamUrl:    z.string().url().optional(),
   allowSelfShutdown:     z.coerce.boolean().default(false),
   allowSelfShutdownDelete: z.coerce.boolean().default(false),
+  allowPersistRegistryCredentials: z.coerce.boolean().default(false),
+  versionCheckCacheTtlSeconds: z.coerce.number().int().positive().default(3600),
 });
 
 export type Config = z.infer<typeof configSchema>;
@@ -28,6 +30,8 @@ export function loadConfig(): Config {
     versionUpstreamUrl: process.env['VERSION_UPSTREAM_URL'],
     allowSelfShutdown:  process.env['ALLOW_SELF_SHUTDOWN'],
     allowSelfShutdownDelete: process.env['ALLOW_SELF_SHUTDOWN_DELETE'],
+    allowPersistRegistryCredentials: process.env['ALLOW_PERSIST_REGISTRY_CREDENTIALS'],
+    versionCheckCacheTtlSeconds: process.env['VERSION_CHECK_CACHE_TTL_SECONDS'],
   });
 
   if (!result.success) {
