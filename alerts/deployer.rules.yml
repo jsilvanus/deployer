@@ -1,0 +1,29 @@
+groups:
+  - name: deployer.rules
+    rules:
+      - alert: DeployerActiveDeployments
+        expr: deployer_deployments_active > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Deployer has active deployments: {{ $value }}"
+          description: "There are active deployments running on the deployer. Check /deployments for progress."
+
+      - alert: DeployerFailedDeployments
+        expr: increase(deployer_deployments_failed_total[1h]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Failed deployments detected"
+          description: "One or more deployments failed in the last hour. Investigate deployment failures."
+
+      - alert: DeployerAppHighCpu
+        expr: deployer_app_cpu_percent > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage on deployer-managed app"
+          description: "An app managed by deployer is above 80% CPU. Consider checking the app's processes."

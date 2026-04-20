@@ -376,6 +376,25 @@ scrape_configs:
     metrics_path: /metrics
 ```
 
+Key metrics exposed (labels in `{}`):
+
+- `deployer_deployments_active`: gauge — number of currently running deployments
+- `deployer_deployments_total{operation}`: counter — total deployments by operation (`deploy|update|rollback`)
+- `deployer_deployments_failed_total{operation}`: counter — failed deployments by operation
+- `deployer_deployment_duration_seconds{app,operation}`: histogram — deployment duration by app and operation
+- `deployer_step_duration_seconds{step,app}`: histogram — per-step execution duration
+- `deployer_step_failures_total{step,app}`: counter — per-step failure count
+- `http_requests_total{method,route,status}`: counter — HTTP requests handled
+- `http_request_duration_seconds{method,route}`: histogram — HTTP request durations
+- `mcp_requests_total{tool}`: counter — MCP tool invocations
+- `mcp_request_duration_seconds{tool}`: histogram — MCP tool duration
+- `deployer_app_status{app,type}`: gauge — 1=running, 0=other (sampled via poller)
+- `deployer_app_state{app,type,state}`: gauge — labelled enumerated app state (e.g., state="running")
+- `deployer_app_cpu_percent{app,type}`: gauge — CPU percent sampled from PM2/Docker
+- `deployer_app_memory_mb{app,type}`: gauge — memory in MiB sampled from PM2/Docker
+
+For alerts and dashboards, prefer low-cardinality labels (`app`, `type`, `step`) and avoid including dynamic IDs.
+
 ---
 
 ## MCP (AI agent integration)
