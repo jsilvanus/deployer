@@ -10,20 +10,21 @@ type MetricMaps = {
 };
 
 function getGlobal(): MetricMaps {
-  // @ts-ignore global cache
-  if (!globalThis[GLOBAL_KEY]) {
+  const g: any = (globalThis as any)[GLOBAL_KEY];
+  if (!g) {
     const registry = new Registry();
     // collect default process metrics into our registry
     collectDefaultMetrics({ register: registry });
-    globalThis[GLOBAL_KEY] = {
+    const init: MetricMaps = {
       gauges: new Map(),
       counters: new Map(),
       histograms: new Map(),
       registry,
-    } as MetricMaps;
+    };
+    (globalThis as any)[GLOBAL_KEY] = init;
+    return init;
   }
-  // @ts-ignore
-  return globalThis[GLOBAL_KEY] as MetricMaps;
+  return g as MetricMaps;
 }
 
 export function getRegistry(): Registry {
@@ -70,7 +71,9 @@ export function incCounter(name: string, labels?: Record<string, string>, value 
 export function getOrCreateHistogram(name: string, help: string, labelNames: string[] = [], buckets?: number[]) {
   const g = getGlobal();
   if (!g.histograms.has(name)) {
-    const h = new Histogram({ name, help, labelNames, registers: [g.registry!], buckets });
+    const opts: any = { name, help, labelNames, registers: [g.registry!] };
+    if (buckets) opts.buckets = buckets;
+    const h = new Histogram(opts);
     g.histograms.set(name, h);
   }
   return g.histograms.get(name)!;
