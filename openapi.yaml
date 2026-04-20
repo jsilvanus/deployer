@@ -32,6 +32,79 @@ components:
       description: >-
         Pass `Authorization: Bearer <token>`. Use the admin token for admin
         endpoints or an app API key for app-scoped endpoints.
+  schemas:
+    RegistryTestRequest:
+      type: object
+      properties:
+        provider:
+          type: string
+          description: docker|npm|pypi|git
+        target:
+          type: string
+          description: image name, package name, or git url
+        credentials:
+          type: object
+          additionalProperties: true
+
+    RegistryTestResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    ShutdownRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [stop, restart, graceful, destroy]
+
+    CachePurgeRequest:
+      type: object
+      properties:
+        target:
+          type: string
+        paths:
+          type: array
+          items:
+            type: string
+
+    OperationResponse:
+      type: object
+      properties:
+        operationId:
+          type: string
+        status:
+          type: string
+
+    VersionDiffResponse:
+      type: object
+      properties:
+        deployed:
+          type: object
+          additionalProperties: true
+        latest:
+          type: object
+          additionalProperties: true
+        upgradeAvailable:
+          type: boolean
+
+    PaginatedVersionsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        nextCursor:
+          type: string
   parameters:
     appId:
       name: appId
@@ -1176,10 +1249,150 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VersionResponse'
+                type: object
+                properties:
+                  appId:
+                    type: string
+                  version:
+                    type: string
+                  deployed:
+                    type: object
+                    additionalProperties: true
+                  latest:
+                    type: object
+                    additionalProperties: true
+                  upgradeAvailable:
+                    type: boolean
         '404':
           description: App not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+
+  /apps/{appId}/version/latest:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    get:
+      tags: [version]
+      summary: Compare deployed vs upstream latest (cached by default)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: refresh
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Version comparison
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionDiffResponse'
+
+  /apps/{appId}/registry/test:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    post:
+      tags: [apps]
+      summary: Test registry credentials or access for an app (transient)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistryTestRequest'
+      responses:
+        '200':
+          description: Test result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistryTestResponse'
+
+  /apps/{appId}/shutdown:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    post:
+      tags: [setup]
+      summary: Stop/restart/shutdown an app
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShutdownRequest'
+      responses:
+        '202':
+          description: Operation accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
+
+  /apps/{appId}/schedules:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    get:
+      tags: [schedules]
+      summary: List schedules for an app
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+    post:
+      tags: [schedules]
+      summary: Create a schedule for an app
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Created
+    delete:
+      tags: [schedules]
+      summary: Delete a schedule by id (use body or query to specify)
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Deleted
+
+  /apps/{appId}/cache/purge:
+    parameters:
+      - $ref: '#/components/parameters/appId'
+    post:
+      tags: [apps]
+      summary: Purge app-related caches
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CachePurgeRequest'
+      responses:
+        '202':
+          description: Purge scheduled/executed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationResponse'
