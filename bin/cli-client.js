@@ -51,12 +51,45 @@ export async function deployApp(appId, payload) { return callApi('POST', `/apps/
 export async function rollbackDeployment(deploymentId, payload) { return callApi('POST', `/deployments/${encodeURIComponent(deploymentId)}/rollback`, payload); }
 export async function getStatus(appId) { return callApi('GET', `/apps/${encodeURIComponent(appId)}/status`); }
 export async function getLogs(appId, params) {
-  // basic implementation: fetch logs endpoint; params may include since/follow
+  // support non-follow and follow (SSE) modes
+  if (params && params.follow) {
+    // open stream at /apps/:id/logs/stream and yield lines via callback if provided
+    const base = process.env.DEPLOYER_HOST ? `http://${process.env.DEPLOYER_HOST}:${process.env.DEPLOYER_PORT||'3000'}` : `http://127.0.0.1:${process.env.DEPLOYER_PORT||'3000'}`;
+    const url = `${base}/apps/${encodeURIComponent(appId)}/logs/stream`;
+    const token = process.env.DEPLOYER_ADMIN_TOKEN;
+    const headers = { Authorization: token ? `Bearer ${token}` : '' };
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`Logs stream failed: ${res.status} ${res.statusText}`);
+    const body = res.body;
+    if (!body) return null;
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for await (const chunk of body) {
+      buffer += decoder.decode(chunk, { stream: true });
+      let idx: number;
+      while ((idx = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (line.startsWith('data:')) {
+          const payload = line.slice(5).trim();
+          try {
+            const parsed = JSON.parse(payload);
+            console.log(parsed);
+          } catch {
+            console.log(payload);
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  // basic non-follow GET
   let url = `/apps/${encodeURIComponent(appId)}/logs`;
   if (params) {
     const qs = new URLSearchParams();
     if (params.since) qs.set('since', params.since);
-    if (params.follow) qs.set('follow', params.follow ? '1' : '0');
+    if (params.stderr === false) qs.set('stderr', 'false');
     const s = qs.toString();
     if (s) url += `?${s}`;
   }
@@ -73,5 +106,7 @@ export async function getMetrics(appId, params) {
   }
   return callApi('GET', url);
 }
+
+export async function getDeployment(deploymentId) { return callApi('GET', `/deployments/${encodeURIComponent(deploymentId)}`); }
 
 export default { createApp, updateApp, deleteApp, listApps, getApp, deployApp, rollbackDeployment, getStatus, getLogs, getMetrics };

@@ -172,14 +172,50 @@ if (cmd === 'setup') {
         const payload = {};
         // simple flags parsing for --allow-db-drop
         if (process.argv.includes('--allow-db-drop')) payload.allowDbDrop = true;
+        const wait = process.argv.includes('--wait');
         const res = await CliClient.deployApp(appId, payload);
         console.log(JSON.stringify(res, null, 2));
+        if (wait && res?.deploymentId) {
+          const id = res.deploymentId;
+          process.stdout.write(`Waiting for deployment ${id}...\n`);
+          for (;;) {
+            await new Promise(r => setTimeout(r, 2000));
+            try {
+              const status = await CliClient.getDeployment(id);
+              process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`);
+              if (['success','failed','rolled_back'].includes(status.status)) {
+                process.stdout.write(`Deployment finished: ${status.status}\n`);
+                break;
+              }
+            } catch (e) {
+              process.stderr.write(`Error polling deployment: ${e?.message ?? e}\n`);
+            }
+          }
+        }
       } else if (sub === 'rollback') {
         const appId = process.argv[3];
         const deploymentId = process.argv[4];
         if (!appId || !deploymentId) { console.error('rollback requires <appId> <deploymentId>'); printUsage(); process.exit(2); }
+        const wait = process.argv.includes('--wait');
         const res = await CliClient.rollbackDeployment(deploymentId, {});
         console.log(JSON.stringify(res, null, 2));
+        if (wait && res?.deploymentId) {
+          const id = res.deploymentId;
+          process.stdout.write(`Waiting for rollback deployment ${id}...\n`);
+          for (;;) {
+            await new Promise(r => setTimeout(r, 2000));
+            try {
+              const status = await CliClient.getDeployment(id);
+              process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`);
+              if (['success','failed','rolled_back'].includes(status.status)) {
+                process.stdout.write(`Rollback finished: ${status.status}\n`);
+                break;
+              }
+            } catch (e) {
+              process.stderr.write(`Error polling rollback deployment: ${e?.message ?? e}\n`);
+            }
+          }
+        }
       } else if (sub === 'status') {
         const appId = process.argv[3];
         if (!appId) { console.error('status requires <appId>'); printUsage(); process.exit(2); }
@@ -189,9 +225,17 @@ if (cmd === 'setup') {
         const appId = process.argv[3];
         if (!appId) { console.error('logs requires <appId>'); printUsage(); process.exit(2); }
         const params = {};
-        if (process.argv.includes('--follow')) params.follow = true;
-        const res = await CliClient.getLogs(appId, params);
-        console.log(JSON.stringify(res, null, 2));
+        if (process.argv.includes('--follow')) {
+          params.follow = true;
+          await CliClient.getLogs(appId, params);
+        } else {
+          if (process.argv.includes('--since')) {
+            const idx = process.argv.indexOf('--since');
+            params.since = process.argv[idx+1];
+          }
+          const res = await CliClient.getLogs(appId, params);
+          console.log(JSON.stringify(res, null, 2));
+        }
       } else if (sub === 'metrics') {
         const appId = process.argv[3];
         if (!appId) { console.error('metrics requires <appId>'); printUsage(); process.exit(2); }
