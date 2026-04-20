@@ -277,14 +277,20 @@ if (!commandExists('pm2')) {
 // ─── Build ───────────────────────────────────────────────────────────────────
 console.log(`${c.bold}  Building deployer${c.reset}`);
 
-info('npm install…');
-if (run('npm install', { cwd: ROOT, stdio: 'inherit' }).status !== 0) die('npm install failed');
+const distIndex = resolve(ROOT, 'dist', 'index.js');
+if (existsSync(distIndex)) {
+  ok('dist found — skipping build');
+  console.log();
+} else {
+  info('npm install…');
+  if (run('npm install', { cwd: ROOT, stdio: 'inherit' }).status !== 0) die('npm install failed');
 
-info('npm run build…');
-if (run('npm run build', { cwd: ROOT, stdio: 'inherit' }).status !== 0) die('npm run build failed');
+  info('npm run build…');
+  if (run('npm run build', { cwd: ROOT, stdio: 'inherit' }).status !== 0) die('npm run build failed');
 
-ok('Build complete');
-console.log();
+  ok('Build complete');
+  console.log();
+}
 
 // ─── Sudoers ─────────────────────────────────────────────────────────────────
 // Grant the deploy user passwordless sudo for the specific nginx commands the
