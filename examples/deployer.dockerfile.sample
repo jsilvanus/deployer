@@ -1,0 +1,30 @@
+# Multi-stage Dockerfile sample for building and running the deployer server
+# Usage: place at repository root or adapt in your CI pipeline.
+
+FROM node:18-alpine AS builder
+WORKDIR /app
+ENV NODE_ENV=development
+# Install build deps
+RUN apk add --no-cache python3 make g++ bash
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+# Build TypeScript artifacts
+RUN npm run build
+
+FROM node:18-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+# Install only production deps
+COPY package.json package-lock.json ./
+RUN npm ci --only=production
+# Copy built artifacts from builder
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/bin ./bin
+# Expose port
+EXPOSE 3000
+# Minimal, non-root runtime (optional)
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+# Start the compiled server
+CMD ["node", "dist/index.js"]

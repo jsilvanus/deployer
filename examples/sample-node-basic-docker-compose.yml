@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  node-basic:
+    build:
+      context: ./test/fixtures/node-basic
+      dockerfile: deployer.dockerfile
+    container_name: node-basic
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./node-basic.env
+    restart: unless-stopped
+    labels:
+      - "com.deployer.generated=true"
