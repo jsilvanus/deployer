@@ -24,17 +24,13 @@ Config & environment → App detection → Container templates → Compose gener
 **Depends on:** Phase 0
 **Goal:** Reliable detection of app types and entry points from a repo
 
-1. Implement detectors:
-	- Node: presence of `package.json`, `start`/`main`/`scripts` (sequential because templates depend on detector output)
-	- Python (pypi/package): `pyproject.toml`, `setup.py`, `requirements.txt`
-	- Generic python app: `app.py`, `wsgi.py`, `gunicorn` hints
-2. Capture metadata: build steps, install commands, test commands, ports, env file expectations
-3. Add unit tests for detection logic using representative repo fixtures
+NOTE: Detailed detection work has been split into `PHASEPLAN2.md` (Plan: App Detection).
+Refer to `PHASEPLAN2.md` for full implementation details, fixtures, and test coverage.
 
-## Phase 1: App Detection & Heuristics ✅ 🔒
-- [x] Implement detectors (node, python-pypi, python, docker, compose)
-- [x] Capture metadata: build/install/test commands, ports, env files
-- [x] Add unit tests using fixtures (node-basic, python-pypi, python-generic)
+Summary status:
+- ✅ Implemented detectors (node, python-pypi, python, docker, compose)
+- ✅ Captured metadata: build/install/test commands, ports, env files
+- ✅ Unit tests and fixtures added (see `test/` and `PHASEPLAN2.md`)
 
 ---
 
@@ -54,7 +50,9 @@ Config & environment → App detection → Container templates → Compose gener
 - [x] Handle `pyproject.toml` builds (PEP 517) and editable installs for dev
 
 **Stream C — Common helper scripts**
-- Image build wrapper, labels for Deployer metadata, healthcheck template, and image tag conventions
+- [x] Image build wrapper, labels for Deployer metadata, healthcheck template, and image tag conventions
+
+**Notes:** `src/services/image-builder.service.ts`, `src/templates/node.dockerfile.ts`, and `src/templates/python.dockerfile.ts` are implemented in the repository.
 
 **Sync point:** Templates reviewed and unit-tested against sample repos
 
@@ -66,19 +64,19 @@ Config & environment → App detection → Container templates → Compose gener
 **Goal:** Generate `docker-compose.yml` per-app and integrate runtime options (networks, volumes, traefik labels)
 
 Sequential steps:
-1. Design compose service schema that Deployer will write (env file mounting, secrets, restart policy)
-2. Implement `compose-write` step extension to accept auto-generated compose content
+1. Design compose service schema that Deployer will write (env file mounting, secrets, restart policy) — implemented
+2. Implement `compose-write` step extension to accept auto-generated compose content — implemented (`src/core/steps/compose-write.step.ts`)
 
 Parallel streams:
 **Stream A — Networking & routing**
-- Generate Traefik labels when domain provided
-- Create internal network options for cross-service comms
+- Generate Traefik labels when domain provided — implemented (`src/core/steps/docker-compose-up.step.ts` uses Traefik overrides)
+- Create internal network options for cross-service comms — implemented (internal network override + network creation)
 
 **Stream B — Persistent storage & env handling**
-- Manage `.env` backups and encrypted env injection into Compose
-- Volume mappings for logs and persistent data
+- Manage `.env` backups and encrypted env injection into Compose — implemented via `AppEnvService` usage in compose/write flow
+- Volume mappings for logs and persistent data — supported by generated compose content
 
-**Sync point:** Compose files generated and `docker compose up` reproduces expected runtime locally for sample apps
+**Sync point:** Compose files generation, overrides, and `docker compose up` integration are implemented and exercised by the compose steps
 
 ---
 
@@ -87,26 +85,11 @@ Parallel streams:
 **Depends on:** Phase 3
 **Goal:** Wire auto-containerization into Deployer plans and MCP tools
 
-1. Add a `deploy-auto-container` plan that uses `git-clone` → detect → write Dockerfile/compose → `docker-compose-up`
-2. Add feature-flagged branching in `update-*` plans to prefer compose when `dockerMode` is active
-3. Ensure snapshots and rollback work with generated resources (compose files, images)
+1. Add plan wiring for container-based deployments — implemented via `deploy-docker`, `deploy-compose`, and `deploy-image` plans (`src/core/plans/*`).
+2. Feature-flagged branching: supported via `runtimeMode`/`dockerMode` flags in `src/config.ts` and plan selection in routes/MCP (`src/api/routes/deployments.route.ts`, `src/mcp/server.ts`).
+3. Snapshots and rollback for generated resources: implemented in compose/write + docker-compose-up steps (rollback uses `composeDown` and file snapshot).
 
----
-
-## Phase 5: Testing, CI, and Safety
-**Mode:** Parallel (2 streams)
-**Depends on:** Phase 4
-**Goal:** End-to-end tests, security checks, and rollback verification
-
-**Stream A — Integration tests**
-- Use small sample repos to run full deploy flow in a CI job (build image, compose up, healthcheck)
-- Test rollback path: simulate failing step and verify rollback cleans generated files & images
-
-**Stream B — Security & hardening**
-- Scan generated images for vulnerabilities, lint Dockerfile best-practices
-- Enforce resource limits, restart policies, and avoid privileged containers
-
-**Sync point:** CI jobs green and rollback verified
+**Notes:** There is no single `deploy-auto-container` plan in the repo; instead Deployer uses explicit per-type plans and runtime-mode gating to select the appropriate flow.
 
 ---
 
@@ -129,7 +112,14 @@ Parallel streams:
 ---
 
 ## Critical Path
-Phase 0 → Phase 1 (detection) → Phase 2 (templates) → Phase 3 (compose generation) → Phase 4 (orchestrator hooks) → Phase 5 (integration tests)
+Phase 0 → Phase 1 (detection) → Phase 2 (templates) → Phase 3 (compose generation) → Phase 4 (orchestrator hooks)
+
+## Remaining work (short)
+- Finalize CI integration for container flows (image build + healthcheck) and add lightweight integration runs.
+- Add image scanning and security checklist to release pipeline.
+- Finish operator runbook: detailed rollback steps, metrics and monitoring to watch during rollout.
+- Publish migration utilities and example override files (`deployer.dockerfile`) for complex apps.
+- Polish docs: ensure examples and Traefik/compose overrides match runtime behavior.
 
 ## Risk Register
 - Detection false-positives/negatives → Mitigation: conservative defaults and opt-out flag; require explicit override in ambiguous cases.
@@ -137,7 +127,7 @@ Phase 0 → Phase 1 (detection) → Phase 2 (templates) → Phase 3 (compose gen
 - Rollback gaps (leftover images/volumes) → Mitigation: include cleanup steps in rollback, and test with failure simulations.
 - CI flakiness on resource-limited runners → Mitigation: use lightweight sample apps for CI and provide an optional `--local` test mode.
 ## Recommended Starting Point
-Implement Phase 0 and Phase 1 first: add Docker-mode config and robust detection logic (with unit tests). Detection output drives every subsequent step, so validating it early fails fast and keeps template work focused.
+Most infra and plan wiring are implemented. Start with Phase 5 (Testing, CI, and Safety) to validate end-to-end flows, exercise rollback paths, and run image scans; then finish Phase 6 (Documentation & Rollout).
 
 ---
 
