@@ -1,6 +1,24 @@
 # Execution Log — deployer
 
 ---
+## 2026-04-20T00:20:00Z — Phase 2 Stream A closed ✅
+Related PhasePlan: PHASEPLAN.md
+PhasePlan-Snapshot: 5ee5534cc224fd49f81baa2f46b7a9e49e117e54
+PhasePlan-ArchivedAt: 2026-04-20T00:20:00Z
+Execution-ID: 20260420T002000Z-003
+
+Owned files:
+- src/templates/node.dockerfile.ts
+- src/services/image-builder.service.ts
+- test/template.node.test.ts
+
+Checkpoint verified:
+- Template generator produces expected Dockerfile content ✓
+- Unit test for template passes ✓
+
+Deviations: none.
+
+---
 ## 2026-04-20T00:10:00Z — Phase 1 closed ✅ 🔒
 Related PhasePlan: PHASEPLAN.md
 PhasePlan-Snapshot: 5ee5534cc224fd49f81baa2f46b7a9e49e117e54

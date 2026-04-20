@@ -44,8 +44,9 @@ Config & environment → App detection → Container templates → Compose gener
 **Goal:** Provide reusable Dockerfile templates and build/run helpers for each app type
 
 **Stream A — Node/NPM Dockerfile**
-- Multi-stage Dockerfile that runs `npm ci`/`npm install`, builds (if `npm run build` exists), and sets a minimal runtime image
-- Support optional `NODE_ENV`, build args, and package-lock handling
+**Stream A — Node/NPM Dockerfile** ✅
+- [x] Multi-stage Dockerfile that runs `npm ci`/`npm install`, builds (if `npm run build` exists), and sets a minimal runtime image
+- [x] Support optional `NODE_ENV`, build args, and package-lock handling
 
 **Stream B — Python / PyPI Dockerfile**
 - Dockerfile that creates a venv, installs via `pip install .` or `pip install -r requirements.txt`, supports `gunicorn`/`uvicorn` entrypoints
