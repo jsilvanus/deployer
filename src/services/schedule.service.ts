@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { parseExpression } from 'cron-parser';
+import cronParser from 'cron-parser';
 import type { Db } from '../db/client.js';
 import { schedules } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
@@ -69,9 +69,9 @@ export class ScheduleService {
 
   computeNextRun(cronExpr: string, tz: string): number | null {
     try {
-      const it = parseExpression(cronExpr, { tz });
-          const next = it.next().toDate();
-          return Math.floor(next.getTime() / 1000);
+      const it = (cronParser as any).parseExpression(cronExpr, { tz });
+      const next = it.next().toDate();
+      return Math.floor(next.getTime() / 1000);
     } catch (err) {
       return null;
     }
