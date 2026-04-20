@@ -79,6 +79,7 @@ export class AppDetectionService {
         if (entrypoint) nodeResult.entrypoint = entrypoint;
         if (build) nodeResult.buildCommand = build;
         if (scripts.start) nodeResult.startCommand = 'npm start';
+        if (scripts.test) nodeResult.testCommand = 'npm test';
         return nodeResult as DetectionResult;
       } catch (err) {
         // fall through to unknown with medium confidence

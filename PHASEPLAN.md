@@ -31,6 +31,11 @@ Config & environment → App detection → Container templates → Compose gener
 2. Capture metadata: build steps, install commands, test commands, ports, env file expectations
 3. Add unit tests for detection logic using representative repo fixtures
 
+## Phase 1: App Detection & Heuristics ✅ 🔒
+- [x] Implement detectors (node, python-pypi, python, docker, compose)
+- [x] Capture metadata: build/install/test commands, ports, env files
+- [x] Add unit tests using fixtures (node-basic, python-pypi, python-generic)
+
 ---
 
 ## Phase 2: Container Template & Builders

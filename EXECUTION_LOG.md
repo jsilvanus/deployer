@@ -1,6 +1,25 @@
 # Execution Log — deployer
 
 ---
+## 2026-04-20T00:10:00Z — Phase 1 closed ✅ 🔒
+Related PhasePlan: PHASEPLAN.md
+PhasePlan-Snapshot: 5ee5534cc224fd49f81baa2f46b7a9e49e117e54
+PhasePlan-ArchivedAt: 2026-04-20T00:10:00Z
+Execution-ID: 20260420T001000Z-002
+
+Owned files:
+- src/services/app-detection.service.ts
+- src/types/detection.ts
+- test/detection.test.ts
+- test/fixtures/node-basic/
+
+Sync point verified:
+- Unit tests: `npm run test` passed (6 tests) ✓
+- Detection metadata (installCmd, buildCommand, startCommand, testCommand) present for node/pypi/generic ✓
+
+Deviations: Minor typing adjustments to `app-detection.service.ts` to only set optional fields when present; this was done to satisfy strict typing and preserve previous detector behaviour.
+
+---
 
 ## 2026-04-20 — Phase 0 closed ✅ 🔒
 Owned files:
