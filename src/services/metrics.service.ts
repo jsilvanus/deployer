@@ -5,6 +5,7 @@ import type { Db } from '../db/client.js';
 import type { AnyLogger } from '../types/logger.js';
 import { Pm2Service } from './pm2.service.js';
 import { DockerService } from './docker.service.js';
+import metricsRegistry from './metrics.registry.js';
 
 export interface MetricPoint {
   timestamp: number;
@@ -56,6 +57,18 @@ export class MetricsService {
         }
 
         rows.push({ id: randomUUID(), appId: app.id, timestamp: now, status, cpu, memoryMb });
+
+        // Export app-level metrics into prom-client registry for scraping
+        try {
+          const labels = { app: app.name, type: app.type } as Record<string, string>;
+          metricsRegistry.setGaugeValue('deployer_app_status', labels, status === 'running' ? 1 : 0);
+          metricsRegistry.setGaugeValue('deployer_app_updating', labels, status === 'updating' ? 1 : 0);
+          if (cpu != null) metricsRegistry.setGaugeValue('deployer_app_cpu_percent', labels, cpu);
+          if (memoryMb != null) metricsRegistry.setGaugeValue('deployer_app_memory_mb', labels, memoryMb);
+          metricsRegistry.setGaugeValue('deployer_app_state', { ...labels, state: status }, 1);
+        } catch {
+          // non-fatal
+        }
       } catch (err) {
         this.logger.warn({ err, appId: app.id }, 'metrics sample failed for app');
       }
