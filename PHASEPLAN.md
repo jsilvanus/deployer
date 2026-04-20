@@ -97,6 +97,18 @@ Parallel streams:
 
 ---
 
+## Phase 5: Testing & Safety (CI removed) ✅ 🔒
+**Mode:** Sequential
+**Depends on:** Phase 4
+**Goal:** Validate end-to-end behavior using local test runs and targeted verification scripts. This project will not add CI pipelines as part of this plan — testing is performed locally and via `npm run test` / targeted scripts.
+
+- [x] Document that CI integration was intentionally removed; rely on local `npm run test` + `scripts/*` verification instead
+- [x] Ensure unit and integration tests cover template generation, compose writing, and image-builder flows
+- [x] Provide verification steps/scripts for maintainers (reused `scripts/verify_phase3.ts` where appropriate)
+
+**Notes:** The team decided to remove CI pipeline work from this phase. Phase 5 focuses on running and verifying tests locally and providing clear instructions and scripts so maintainers can run the same checks in their environment.
+
+
 ## Phase 6: Documentation & Rollout
 **Mode:** Parallel (up to 3 streams)
 **Depends on:** Phase 5

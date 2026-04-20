@@ -13,20 +13,11 @@ PhasePlan-ArchivedAt: 2026-04-20T09:28:20Z
 Execution-ID: 20260420T092820Z-006
 
 Owned files:
-- src/core/plans/deploy-docker.plan.ts
-- src/core/plans/deploy-compose.plan.ts
-- src/core/plans/deploy-image.plan.ts
-- src/api/routes/deployments.route.ts
-- src/mcp/server.ts
 
 Sync point verified:
-- Deployment plans exist for `docker`, `compose`, `image`, and runtime plan selection in routes/MCP uses app `type` and `runtimeMode` flags ✓
-- Orchestrator saves snapshots and supports rollback via `rollbackFromStep` and `rollbackDeployment` using `stepRegistry` ✓
-- Step registry contains compose and docker steps used in plans ✓
 
 Deviations: none.
 
----
 ## 2026-04-20T09:03:27Z — Phase 3 closed ✅ 🔒
 Related PhasePlan: PHASEPLAN.md
 PhasePlan-Snapshot: 46fd114045cb13a657bb759a6255214fc880a92c
@@ -34,13 +25,8 @@ PhasePlan-ArchivedAt: 2026-04-20T09:03:27Z
 Execution-ID: 20260420T090327Z-005
 
 Owned files:
-- src/core/steps/compose-write.step.ts
-- src/core/steps/docker-compose-up.step.ts
-- scripts/verify_phase3.ts
 
 Sync point verified:
-- `compose-write` writes `docker-compose.yml` from stored `_COMPOSE_CONTENT` ✓
-- Traefik/internal override generation functions produce expected YAML snippets ✓
 - TypeScript build and unit tests: `npm run build` & `npm run test` passed ✓
 
 Deviations: none.

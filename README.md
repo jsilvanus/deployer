@@ -6,29 +6,17 @@ Every step snapshots the state it changes before running. On failure — or on a
 
 ---
 
-## Quick start (npx)
-
-```bash
-# Create a minimal .env in your working directory
-cat > .env <<'EOF'
-DEPLOYER_ADMIN_TOKEN=replace-with-32-chars-or-more
-DEPLOYER_ENV_ENCRYPTION_KEY=replace-with-64-hex-chars
-EOF
-
-npx @jsilvanus/deployer
-# Server listens on http://localhost:3000
-```
-
-Generate a secure encryption key:
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
----
-
 ## Installation options
 
-### Option A — Bare metal (Ubuntu/Debian, PM2 + nginx)
+### Option A — npx quick setup
+
+```
+npx @jsilvanus/deployer setup --user deploy --domain deployer.example.com --port 3000 --self-register
+```
+
+See full flag list below.
+
+### Option B — Bare metal (Ubuntu/Debian, PM2 + nginx)
 
 Clone, install dependencies, and run the interactive setup wizard:
 
@@ -46,33 +34,7 @@ The wizard:
 5. Starts the server as a PM2 process
 6. Configures an nginx reverse proxy for the domain (with optional Let's Encrypt SSL)
 
-**Full flag reference:**
-
-| Flag | Default | Description |
-|---|---|---|
-| `--user <name>` | `$SUDO_USER` | OS user to run PM2 under |
-| `--domain <host>` | — | Domain for nginx reverse proxy |
-| `--port <n>` | `3000` | HTTP port |
-| `--location <path>` | `/` | nginx location block |
-| `--pm2-name <name>` | `deployer` | PM2 process name |
-| `--traefik` | — | Set up Traefik after startup |
-| `--traefik-mode <mode>` | `auto` | `standalone`, `behind-nginx`, or `auto` |
-| `--traefik-port <n>` | `8080` | Traefik HTTP port |
-| `--acme-email <email>` | — | Let's Encrypt email (standalone mode) |
-| `--self-register` | — | Register the deployer as a managed app after startup |
-
-**Example — full bare-metal setup with Traefik and self-registration:**
-```bash
-sudo node bin/setup.js \
-  --user deploy \
-  --domain deployer.example.com \
-  --traefik \
-  --traefik-mode standalone \
-  --acme-email admin@example.com \
-  --self-register
-```
-
-### Option B — Docker
+### Option C — Docker
 
 ```yaml
 # docker-compose.yml
@@ -99,7 +61,33 @@ volumes:
 docker compose up -d
 ```
 
-When running in Docker, `node` and `python` app types are not available (PM2 is not in the image). Use `docker` or `compose` app types instead.
+### Setup configuration
+
+**Full flag reference:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--user <name>` | `$SUDO_USER` | OS user to run PM2 under |
+| `--domain <host>` | — | Domain for nginx reverse proxy |
+| `--port <n>` | `3000` | HTTP port |
+| `--location <path>` | `/` | nginx location block |
+| `--pm2-name <name>` | `deployer` | PM2 process name |
+| `--traefik` | — | Set up Traefik after startup |
+| `--traefik-mode <mode>` | `auto` | `standalone`, `behind-nginx`, or `auto` |
+| `--traefik-port <n>` | `8080` | Traefik HTTP port |
+| `--acme-email <email>` | — | Let's Encrypt email (standalone mode) |
+| `--self-register` | — | Register the deployer as a managed app after startup |
+
+**Example — full bare-metal setup with Traefik and self-registration:**
+```bash
+sudo node bin/setup.js \
+  --user deploy \
+  --domain deployer.example.com \
+  --traefik \
+  --traefik-mode standalone \
+  --acme-email admin@example.com \
+  --self-register
+```
 
 ---
 

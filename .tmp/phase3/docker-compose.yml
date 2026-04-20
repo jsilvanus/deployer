@@ -1,0 +1,5 @@
+version: '3.8'
+services:
+  web:
+    image: alpine:3.18
+    command: ["/bin/sh", "-c", "echo hello"]
