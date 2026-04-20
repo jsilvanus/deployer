@@ -109,6 +109,8 @@ Audit → CLI spec → API client → Replace function calls → CLI wiring → 
 
 **Sync point:** All CLI commands usable via `npx` and deliver consistent server-side results.
 
+**Phase 4 status:** ✅ 🔒 (logs `--follow` streaming and `deploy --wait` implemented)
+
 ---
 
 ## Phase 5: Logging, Audit, and SQLite write-safety
@@ -121,6 +123,14 @@ Audit → CLI spec → API client → Replace function calls → CLI wiring → 
 2. On server, add/verify request-audit middleware to log action, caller token, timestamp, and request body (to `deployment_snapshots`/deployment logs).
 3. Implement or verify server-side concurrency safeguards for sqlite writes (queuing, single-writer mutex, or serialized transactions).
 4. Add integration tests simulating concurrent CLI requests to confirm sqlite remains consistent.
+
+### Implementation notes (done)
+- Added `request_logs` table to `src/db/schema.ts` to store audit records.
+- Added `src/api/plugins/request-audit.plugin.ts` which records method, path, headers, masked token, body (truncated), status code, and timestamp into `request_logs` on every response. Registered plugin in `src/api/server.ts` after auth plugin.
+- Added `runExclusive` in `src/db/client.ts` to serialize database write actions and used it for request audit inserts to reduce write contention.
+
+**Sync point:** All incoming HTTP requests are now recorded in `request_logs`, and writes are serialized via `runExclusive` to protect sqlite under concurrent CLI traffic.
+
 
 **Sync point:** Audit records appear in DB for CLI calls and concurrent writes are safe.
 

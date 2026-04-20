@@ -268,6 +268,37 @@ Sync point verified:
 Planned follow-ups:
 - Improve streaming logs (`--follow`) UX and implement optional `--wait` polling for long-running deployments.
 
+---
+
+## 2026-04-20 — Phase 4 closed ✅ 🔒
+Owned files:
+- bin/deployer.js
+- bin/cli-client.js
+
+Sync point verified:
+- `logs --follow` streams server SSE from `/apps/:appId/logs/stream` and prints lines to stdout.
+- `deploy --wait` and `rollback --wait` poll `/deployments/{deploymentId}` until a terminal status (`success`, `failed`, `rolled_back`) and print status updates.
+
+Deviations: none.
+
+---
+
+## 2026-04-21 — Phase 5 closed ✅ 🔒
+Owned files:
+- src/db/schema.ts
+- src/api/plugins/request-audit.plugin.ts
+- src/db/client.ts
+- src/api/server.ts
+
+Sync point verified:
+- `request_logs` table added to schema for auditing requests.
+- `request-audit` plugin registered and records requests (method, path, headers token mask, truncated body, response status) into `request_logs` on response.
+- `runExclusive` helper added to `src/db/client.ts` and used to serialize request log writes, reducing sqlite write contention.
+
+Deviations: none.
+
+
+
 
 
 
