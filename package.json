@@ -12,7 +12,9 @@
     "dist/",
     "bin/",
     ".env.example",
-    "README.md"
+    "README.md",
+    "tsconfig.build.json",
+    "tsconfig.json"
   ],
   "engines": {
     "node": ">=20"
