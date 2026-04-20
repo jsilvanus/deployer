@@ -32,7 +32,19 @@ export class ScheduleService {
 
   async listForDue(now = new Date()) {
     const rows = await this.db.select().from(schedules);
-    return rows.filter(r => r.enabled && r.nextRun && r.nextRun <= now);
+    const nowSec = Math.floor(now.getTime() / 1000);
+    function nextRunToSeconds(v: unknown): number | null {
+      if (v == null) return null;
+      if (v instanceof Date) return Math.floor(v.getTime() / 1000);
+      if (typeof v === 'number') return Math.floor(v);
+      const n = Number(v as any);
+      return Number.isFinite(n) ? Math.floor(n) : null;
+    }
+    return rows.filter(r => {
+      if (!r.enabled) return false;
+      const nr = nextRunToSeconds((r as any).nextRun);
+      return nr !== null && nr <= nowSec;
+    });
   }
 
   async listAll() {
@@ -59,7 +71,7 @@ export class ScheduleService {
     try {
       const it = parseExpression(cronExpr, { tz });
       const next = it.next().toDate();
-      return next;
+      return Math.floor(next.getTime() / 1000);
     } catch (err) {
       return null;
     }
