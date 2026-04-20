@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import authPlugin from './plugins/auth.plugin.js';
 import errorHandlerPlugin from './plugins/error-handler.plugin.js';
 import rateLimitPlugin from './plugins/rate-limit.plugin.js';
+import metricsPlugin from './plugins/metrics.plugin.js';
 import { LastModifiedCache } from '../cache/last-modified.cache.js';
 import { healthRoutes } from './routes/health.route.js';
 import { appsRoutes } from './routes/apps.route.js';
@@ -35,6 +36,7 @@ export async function createServer(config: Config, db: Db): Promise<FastifyInsta
 
   await fastify.register(errorHandlerPlugin);
   await fastify.register(rateLimitPlugin);
+  await fastify.register(metricsPlugin);
 
   if (config.corsOrigins) {
     const origins = config.corsOrigins.split(',').map(o => o.trim()).filter(Boolean);
