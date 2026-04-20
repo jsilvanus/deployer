@@ -8,7 +8,18 @@ const configSchema = z.object({
   dbPath:                z.string().default('./deployer.db'),
   corsOrigins:           z.string().optional(),
   // Runtime mode: when true, prefer Docker/Compose-based deployments and enable auto-containerization features
+  // Deprecated: use `runtimeMode` for explicit mode selection. kept for backward compatibility.
   dockerMode:            z.coerce.boolean().default(false),
+  // Explicit runtime mode: 'host' (default) or 'docker'
+  runtimeMode:           z.enum(['host', 'docker']).default('host'),
+  // Image builder selection: 'docker' or 'podman'
+  imageBuilder:          z.enum(['docker', 'podman']).default('docker'),
+  // Base images and builder options for auto-containerization
+  baseNodeImage:         z.string().default('node:18-alpine'),
+  basePythonImage:       z.string().default('python:3.11-slim'),
+  imageTagPrefix:        z.string().default('deployer'),
+  imageBuildArgs:        z.string().optional(),
+  imageBuildTimeoutSeconds: z.coerce.number().int().positive().default(300),
   // Feature gating and safety flags
   schedulerEnabled:      z.coerce.boolean().default(false),
   versionUpstreamUrl:    z.string().url().optional(),
@@ -43,4 +54,13 @@ export function loadConfig(): Config {
   }
 
   return result.data;
+}
+
+export function effectiveConfig(): Config {
+  const cfg = loadConfig();
+  // If runtimeMode explicitly set to 'docker', ensure dockerMode is true for backward compatibility
+  if (cfg.runtimeMode === 'docker') {
+    return { ...cfg, dockerMode: true };
+  }
+  return cfg;
 }
