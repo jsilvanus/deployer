@@ -1,3 +1,34 @@
+# Execution Log — Metric Instrumentation
+
+Related PhasePlan: METRICPLAN.md
+PhasePlan-Snapshot: c9d2fccd0e0b7dd6a422fb9fe9364c6ce798c7e1
+PhasePlan-ArchivedAt: 2026-04-20T11:42:00Z
+Execution-ID: 20260420T114200Z-001
+
+---
+
+## 2026-04-20 — Phase 1-3 closed ✅ 🔒
+Owned files:
+- package.json
+- src/services/metrics.registry.ts
+- src/api/routes/metrics.route.ts
+- src/services/deployment.service.ts
+- src/core/orchestrator.ts
+- src/api/plugins/metrics.plugin.ts
+- src/api/server.ts
+- src/services/metrics.service.ts
+- src/mcp/server.ts
+- README.md
+- alerts/deployer.rules.yml
+- test/metrics.test.ts
+
+Sync point verified:
+- `/metrics` exposition returns `prom-client` output (default process metrics present)
+- HTTP metrics recorded via plugin (verified by injecting a test request)
+- Deployment counters, active gauge, step histograms registered and accessible via registry
+- Unit tests pass (vitest: 5 files, 10 tests, 0 failures)
+
+Deviations: none.
 # Execution Log — deployer
 
 ---
