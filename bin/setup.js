@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execSync, spawnSync } from 'child_process';
-import { existsSync, writeFileSync, chmodSync } from 'fs';
+import { existsSync, writeFileSync, chmodSync, readFileSync } from 'fs';
 import { randomBytes } from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
@@ -339,17 +339,68 @@ console.log();
 // ─── PM2 start (as deploy user) ──────────────────────────────────────────────
 console.log(`${c.bold}  Starting deployer via PM2${c.reset}`);
 
-// Run PM2 as the deploy user, not root
-const pm2Cmd = (cmd) => run(`su -s /bin/sh ${deployUser} -c "pm2 ${cmd}"`, { cwd: ROOT, stdio: 'inherit' });
+// Locate pm2 binary (use full path where possible)
+const pm2Bin = run('which pm2').stdout.trim() || 'pm2';
 
-pm2Cmd(`delete ${pm2Name} 2>/dev/null || true`);
+// Determine deploy user's home directory for pm2 startup
+let deployUserHome = run(`getent passwd ${deployUser} | cut -d: -f6`).stdout.trim();
+if (!deployUserHome) {
+  deployUserHome = run(`sh -lc "echo ~${deployUser}"`).stdout.trim() || `/home/${deployUser}`;
+}
 
-if (pm2Cmd(`start dist/index.js --name ${pm2Name} --env production`).status !== 0) {
+// Helper: run pm2 as the deploy user
+const suPm2 = (cmd) => run(`su -s /bin/sh ${deployUser} -c "${pm2Bin} ${cmd}"`, { cwd: ROOT, stdio: 'inherit' });
+
+// Ensure any previous process is removed, then start under the deploy user
+suPm2(`delete ${pm2Name} 2>/dev/null || true`);
+
+if (suPm2(`start dist/index.js --name ${pm2Name} --env production`).status !== 0) {
   die('PM2 start failed');
 }
-pm2Cmd('save');
+
+// Persist the current process list for startup
+if (suPm2('save').status !== 0) {
+  warn('pm2 save failed — process may not persist across reboots');
+}
 
 ok(`Deployer running as PM2 process "${pm2Name}" (user: ${deployUser})`);
+console.log();
+
+// Configure PM2 to auto-start on boot using systemd
+console.log(`${c.bold}  Configuring PM2 to start on boot (systemd)${c.reset}`);
+try {
+  const startupCmd = `${pm2Bin} startup systemd -u ${deployUser} --hp ${deployUserHome}`;
+  const sr = run(startupCmd, { stdio: 'inherit' });
+  if (sr.status !== 0) {
+    warn('pm2 startup command returned a non-zero exit. You may need to run it manually.');
+  }
+
+  // systemctl unit name pattern used by PM2: pm2-<user>.service
+  const unitName = `pm2-${deployUser}`;
+  const unitPath = `/etc/systemd/system/${unitName}.service`;
+
+  // Ensure systemd knows about new units and enable/start if present
+  run('systemctl daemon-reload');
+  if (existsSync(unitPath)) {
+    if (run(`systemctl enable ${unitName}`, { stdio: 'inherit' }).status === 0) {
+      ok(`Enabled systemd unit: ${unitName}`);
+    } else {
+      warn(`Could not enable systemd unit: ${unitName}`);
+    }
+
+    if (run(`systemctl start ${unitName}`, { stdio: 'inherit' }).status === 0) {
+      ok(`Started systemd unit: ${unitName}`);
+    } else {
+      warn(`Could not start systemd unit: ${unitName}`);
+    }
+  } else {
+    warn(`PM2 did not create expected unit (${unitPath}). If the service is not enabled on reboot, run:`);
+    warn(`  ${startupCmd}`);
+    warn('Then run: systemctl daemon-reload && systemctl enable pm2-<user> && systemctl start pm2-<user>');
+  }
+} catch (err) {
+  warn(`PM2 systemd configuration failed: ${err?.message ?? err}`);
+}
 console.log();
 
 // ─── Nginx vhost for deployer itself ─────────────────────────────────────────
