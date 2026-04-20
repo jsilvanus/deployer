@@ -6,6 +6,27 @@ PhasePlan-ArchivedAt: 2026-04-20T11:42:00Z
 Execution-ID: 20260420T114200Z-001
 
 ---
+## 2026-04-20T09:28:20Z — Phase 4 closed ✅ 🔒
+Related PhasePlan: PHASEPLAN.md
+PhasePlan-Snapshot: f3eb1bca019e559c509e0cb7b2e18dea93eb4c4e
+PhasePlan-ArchivedAt: 2026-04-20T09:28:20Z
+Execution-ID: 20260420T092820Z-006
+
+Owned files:
+- src/core/plans/deploy-docker.plan.ts
+- src/core/plans/deploy-compose.plan.ts
+- src/core/plans/deploy-image.plan.ts
+- src/api/routes/deployments.route.ts
+- src/mcp/server.ts
+
+Sync point verified:
+- Deployment plans exist for `docker`, `compose`, `image`, and runtime plan selection in routes/MCP uses app `type` and `runtimeMode` flags ✓
+- Orchestrator saves snapshots and supports rollback via `rollbackFromStep` and `rollbackDeployment` using `stepRegistry` ✓
+- Step registry contains compose and docker steps used in plans ✓
+
+Deviations: none.
+
+---
 ## 2026-04-20T09:03:27Z — Phase 3 closed ✅ 🔒
 Related PhasePlan: PHASEPLAN.md
 PhasePlan-Snapshot: 46fd114045cb13a657bb759a6255214fc880a92c
