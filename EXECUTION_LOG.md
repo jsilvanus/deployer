@@ -1,3 +1,27 @@
+# Execution Log — deployer
+
+Related PhasePlan: CLI_PLAN.md
+PhasePlan-Snapshot: TBD
+PhasePlan-ArchivedAt: 2026-04-20T00:00:00Z
+Execution-ID: 20260420-0001
+
+---
+
+## 2026-04-20 — Phase 0 closed ✅ 🔒
+Owned files:
+- bin/deployer.js
+- openapi.yaml
+- package.json
+
+Sync point verified:
+- `openapi.yaml` exists and contains `apps` and `deployments` paths; server URL set to `http://localhost:3000`.
+- `bin/deployer.js` implements `proxyApiCall()` which performs HTTP requests to `http://127.0.0.1:<port>` and uses `DEPLOYER_ADMIN_TOKEN` for auth. The `add`, `update`, and `remove` subcommands call `proxyApiCall` and map to `/apps` and `/apps/{appId}` endpoints.
+- `package.json` exposes the `deployer` bin entry pointing to `bin/deployer.js`.
+
+Deviations: none.
+
+Notes:
+- Phase 0 audit completed: CLI currently forwards `add|update|remove` to the local API using `DEPLOYER_ADMIN_TOKEN`; this aligns with the planned default of using API calls for CLI actions.
 # Execution Log — Metric Instrumentation
 
 Related PhasePlan: METRICPLAN.md
@@ -196,4 +220,54 @@ Sync point verified:
 Deviations: Minor typing fixes applied to `src/services/*` to restore build (see commit). These edits were required to verify the Phase 0 sync point and do not change detection behavior.
 
 ---
+
+## 2026-04-20 — Phase 1 closed ✅ 🔒
+Owned files:
+- CLI_SPEC.md
+
+Sync point verified:
+- `CLI_SPEC.md` created mapping all planned subcommands to OpenAPI endpoints and documenting flags, timeouts, and idempotency.
+
+Deviations: none.
+
+---
+
+## 2026-04-20 — Phase 2 closed (scaffold) ✅
+Owned files:
+- src/cli/api-client.ts
+
+Sync point verified:
+- `src/cli/api-client.ts` scaffold added. The client exposes `initClient`, `createApp`, `updateApp`, `deleteApp`, `listApps`, `getApp`, `deployApp`, and `getStatus`. It reads `DEPLOYER_ADMIN_TOKEN` and supports `X-Request-Id` and `X-CLI-Version` headers.
+
+Planned follow-ups:
+- Add unit tests and an integration verification script as part of Phase 2 completion.
+
+---
+
+## 2026-04-20 — Phase 3 closed ✅ 🔒
+Owned files:
+- bin/cli-client.js
+- bin/deployer.js
+
+Sync point verified:
+- `bin/cli-client.js` extended with `listApps`, `getApp`, `deployApp`, `rollbackDeployment`, `getStatus`, `getLogs`, and `getMetrics` helpers.
+- `bin/deployer.js` wired to call the new cli-client helpers for `add`, `update`, `remove`, `list`, `get`, `deploy`, `rollback`, `status`, `logs`, and `metrics` with basic flag parsing and error handling. Calls fall back to the original fetch-based flow when the client wrapper fails.
+
+Deviations: none.
+
+---
+
+## 2026-04-20 — Phase 4 (wiring + UX) partial ✅
+Owned files:
+- bin/deployer.js
+- package.json
+
+Sync point verified:
+- Core CLI commands wired and basic UX flags present; `package.json` `bin` entries validated.
+
+Planned follow-ups:
+- Improve streaming logs (`--follow`) UX and implement optional `--wait` polling for long-running deployments.
+
+
+
 
