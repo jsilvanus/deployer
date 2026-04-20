@@ -4,6 +4,8 @@ A self-hosted deployment orchestrator with a REST API and MCP server. Manages de
 
 Every step snapshots the state it changes before running. On failure — or on an explicit rollback — every completed step is undone in reverse: git is reset, `.env` files are restored from encrypted backups, migrations are reversed, and nginx configs are rewritten.
 
+**Work in progress currently, subject to changes in small timeframes.**
+
 ---
 
 ## Installation options
