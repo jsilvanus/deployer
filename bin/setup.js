@@ -67,6 +67,41 @@ function getArg(name) {
   return idx !== -1 && args[idx + 1] ? args[idx + 1] : null;
 }
 
+// Install target for making a persistent install when invoked via npx.
+// Defaults to /srv/deployer unless overridden with --install-dir.
+const installDir = getArg('--install-dir') || '/srv/deployer';
+const installedRun = args.includes('--migrated-from-install');
+
+if (!installedRun) {
+  // If we're not already running from an installed copy, ensure a
+  // persistent install exists in installDir and re-exec the installed
+  // setup script so __dirname/ROOT point at the installed location.
+  try {
+    // Create the directory (no-op if exists)
+    run(`mkdir -p ${installDir}`);
+
+    const installedSetup = resolve(installDir, 'node_modules', '@jsilvanus', 'deployer', 'bin', 'setup.js');
+    const alreadyInstalled = existsSync(installedSetup);
+
+    if (!alreadyInstalled) {
+      info(`Installing @jsilvanus/deployer into ${installDir} ...`);
+      const installCmd = `npm install --prefix ${installDir} @jsilvanus/deployer --no-save --unsafe-perm`;
+      const ir = run(installCmd, { stdio: 'inherit' });
+      if (ir.status !== 0) die('npm install into install-dir failed');
+    }
+
+    // Re-exec the installed setup script with a marker to avoid recursion.
+    const passArgs = process.argv.slice(2).concat(['--migrated-from-install']);
+    const cmd = `node ${installedSetup} ${passArgs.map(a => a.includes(' ') ? `'${a.replace(/'/g, "'\\''")}'` : a).join(' ')}`;
+    const r = run(cmd, { stdio: 'inherit' });
+    process.exit(r.status ?? 0);
+  } catch (err) {
+    // If installation or re-exec fails, surface the error and continue
+    // running the current script so the user can diagnose.
+    warn(`Could not perform install-to-dir (${installDir}): ${err?.message ?? err}`);
+  }
+}
+
 const domain        = getArg('--domain');
 const port          = parseInt(getArg('--port') || '3000', 10);
 const pm2Name       = getArg('--pm2-name') || 'deployer';
