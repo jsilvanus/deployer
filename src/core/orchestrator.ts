@@ -3,6 +3,7 @@ import type { App, Deployment, StepContext } from '../types/index.js';
 import type { DeploymentService } from '../services/deployment.service.js';
 import type { Config } from '../config.js';
 import type { Db } from '../db/client.js';
+import metricsRegistry from '../services/metrics.registry.js';
 
 export interface DeploymentStep {
   name: string;
@@ -39,6 +40,20 @@ export class DeploymentOrchestrator {
     };
 
     await this.deploymentSvc.updateStatus(deploymentId, { status: 'running' });
+    // mark active and start duration timer
+    try {
+      const gauge = metricsRegistry.getOrCreateGauge('deployer_deployments_active', 'Number of running deployments');
+      gauge.inc();
+    } catch {
+      /* ignore */
+    }
+    let endTimer: (() => void) | null = null;
+    try {
+      const hist = metricsRegistry.getOrCreateHistogram('deployer_deployment_duration_seconds', 'Deployment duration seconds', ['app', 'operation']);
+      endTimer = hist.startTimer({ app: app.name, operation: deployment.operation });
+    } catch {
+      endTimer = null;
+    }
 
     const commitBefore = await this.tryGetCommit(app);
     if (commitBefore) {
@@ -87,6 +102,10 @@ export class DeploymentOrchestrator {
           finishedAt: new Date(),
         });
 
+        try { metricsRegistry.incCounter('deployer_deployments_failed_total', { operation: deployment.operation }); } catch {}
+        try { const g = metricsRegistry.getOrCreateGauge('deployer_deployments_active', 'Number of running deployments'); g.dec(); } catch {}
+        try { if (endTimer) endTimer(); } catch {}
+
         await this.rollbackFromStep(ctx, deploymentId, i);
         return;
       }
@@ -99,6 +118,9 @@ export class DeploymentOrchestrator {
       finishedAt: new Date(),
       ...(commitAfter != null ? { gitCommitAfter: commitAfter } : {}),
     });
+
+    try { const g = metricsRegistry.getOrCreateGauge('deployer_deployments_active', 'Number of running deployments'); g.dec(); } catch {}
+    try { if (endTimer) endTimer(); } catch {}
 
     ctx.logger.info('deployment completed successfully');
   }
@@ -127,6 +149,9 @@ export class DeploymentOrchestrator {
     };
 
     await this.deploymentSvc.updateStatus(rollbackDeploymentId, { status: 'running' });
+    try { const gauge = metricsRegistry.getOrCreateGauge('deployer_deployments_active', 'Number of running deployments'); gauge.inc(); } catch {}
+    let rollbackEnd: (() => void) | null = null;
+    try { rollbackEnd = metricsRegistry.getOrCreateHistogram('deployer_deployment_duration_seconds', 'Deployment duration seconds', ['app','operation']).startTimer({ app: app.name, operation: 'rollback' }); } catch {}
 
     const snapshots = await this.deploymentSvc.getSnapshots(targetDeploymentId);
     const reversible = snapshots
@@ -157,6 +182,9 @@ export class DeploymentOrchestrator {
       currentStep: null,
       finishedAt: new Date(),
     });
+
+    try { const g = metricsRegistry.getOrCreateGauge('deployer_deployments_active', 'Number of running deployments'); g.dec(); } catch {}
+    try { if (rollbackEnd) rollbackEnd(); } catch {}
 
     ctx.logger.info('rollback completed');
   }

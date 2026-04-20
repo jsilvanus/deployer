@@ -4,6 +4,7 @@ import { deployments, deploymentSnapshots } from '../db/schema.js';
 import type { Db } from '../db/client.js';
 import type { Deployment, DeploymentSnapshot, DeploymentOperation, TriggeredBy } from '../types/index.js';
 import type { LastModifiedCache } from '../cache/last-modified.cache.js';
+import metricsRegistry from './metrics.registry.js';
 
 function rowToDeployment(row: typeof deployments.$inferSelect): Deployment {
   return {
@@ -59,6 +60,12 @@ export class DeploymentService {
     if (!row) throw new Error('Insert failed');
     this.cache?.touch(`deployment:${row.id}`, now);
     this.cache?.touch(`app-deployments:${appId}`, now);
+    // Increment deployment total counter for this operation
+    try {
+      metricsRegistry.incCounter('deployer_deployments_total', { operation });
+    } catch {
+      // non-fatal if metrics not available
+    }
     return rowToDeployment(row);
   }
 
