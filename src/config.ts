@@ -7,6 +7,8 @@ const configSchema = z.object({
   allowedDeployPaths:    z.string().default('/srv/apps'),
   dbPath:                z.string().default('./deployer.db'),
   corsOrigins:           z.string().optional(),
+  // Runtime mode: when true, prefer Docker/Compose-based deployments and enable auto-containerization features
+  dockerMode:            z.coerce.boolean().default(false),
   // Feature gating and safety flags
   schedulerEnabled:      z.coerce.boolean().default(false),
   versionUpstreamUrl:    z.string().url().optional(),
@@ -32,6 +34,7 @@ export function loadConfig(): Config {
     allowSelfShutdownDelete: process.env['ALLOW_SELF_SHUTDOWN_DELETE'],
     allowPersistRegistryCredentials: process.env['ALLOW_PERSIST_REGISTRY_CREDENTIALS'],
     versionCheckCacheTtlSeconds: process.env['VERSION_CHECK_CACHE_TTL_SECONDS'],
+    dockerMode:          process.env['DEPLOYER_DOCKER_MODE'],
   });
 
   if (!result.success) {

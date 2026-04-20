@@ -112,6 +112,7 @@ const traefikPort   = parseInt(getArg('--traefik-port') || '8080', 10);
 const acmeEmail     = getArg('--acme-email');
 const doTraefik     = args.includes('--traefik') || !!traefikMode;
 const doSelfRegister = args.includes('--self-register');
+const doGlobalCommand = args.includes('--global-command');
 
 if (!deployUser || deployUser === 'root') {
   die(
@@ -391,6 +392,23 @@ if (domain) {
     info('certbot not installed — using plain HTTP config');
     info('Install certbot and re-run setup (or run certbot manually) to enable SSL.');
   }
+
+// Create a global wrapper/symlink if requested. This makes `deployer` available
+// on PATH by pointing /usr/local/bin/deployer to the installed CLI in ROOT.
+if (doGlobalCommand) {
+  try {
+    const target = resolve(ROOT, 'bin', 'deployer.js');
+    const link = '/usr/local/bin/deployer';
+    // Ensure target is executable
+    try { chmodSync(target, 0o755); } catch { /* ignore */ }
+    run(`ln -sf ${target} ${link}`);
+    chmodSync(link, 0o755);
+    ok(`Global command created: ${link} -> ${target}`);
+    console.log();
+  } catch (err) {
+    warn(`Could not create global command symlink: ${err?.message ?? err}`);
+  }
+}
 
   // ── Generate nginx config ──
   const locationBlock = [

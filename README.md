@@ -169,37 +169,7 @@ Deploy plan: `preflight → compose write → docker compose up`
 ---
 
 ## Registering an app
-
-```bash
-# node app
-curl -X POST http://localhost:3000/apps \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "my-api",
-    "type": "node",
-    "repoUrl": "git@github.com:you/my-api.git",
-    "branch": "main",
-    "deployPath": "/srv/apps/my-api",
-    "domain": "api.example.com",
-    "port": 4000,
-    "nginxEnabled": true,
-    "dbEnabled": true,
-    "dbName": "my_api"
-  }'
-
-# compose app (no git repo needed)
-curl -X POST http://localhost:3000/apps \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "postgres",
-    "type": "compose",
-    "deployPath": "/srv/apps/postgres",
-    "composeContent": "services:\n  db:\n    image: postgres:16\n    restart: unless-stopped\n",
-    "internalNetwork": true
-  }'
-```
+Refer to the included OpenAPI specification for full API details and example requests. The canonical spec is [openapi.yaml](openapi.yaml#L1) in the repository root.
 
 **Save the `apiKey` from the response — it is shown only once.**
 
@@ -290,8 +260,10 @@ GET  /apps/:appId/metrics?from=<ISO>&to=<ISO>
 # Default window: last hour. Retention: 7 days.
 
 GET  /metrics
-# Prometheus exposition format (admin only). Gauges:
+# Prometheus exposition format (admin only). Gauges + labelled state:
 #   deployer_app_status{app,type}        1=running, 0=other
+#   deployer_app_state{app,type,state}   labelled enumerated state (state="running"|"updating"|...)
+#   deployer_app_updating{app,type}      1=updating, 0=not updating (convenience gauge)
 #   deployer_app_cpu_percent{app,type}
 #   deployer_app_memory_mb{app,type}
 ```
