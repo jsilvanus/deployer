@@ -69,7 +69,7 @@ export const pypiInstallPackageStep: DeploymentStep = {
   },
 
   async rollback(ctx, snapshot): Promise<void> {
-    const { packageName, previousVersion } = snapshot as PypiInstallSnapshot;
+    const { packageName, previousVersion } = snapshot as unknown as PypiInstallSnapshot;
     if (previousVersion && packageName) {
       const pip = join(ctx.app.deployPath, '.venv', 'bin', 'pip');
       ctx.logger.info({ packageName, previousVersion }, 'pip rollback: reinstalling previous version');

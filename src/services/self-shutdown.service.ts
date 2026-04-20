@@ -51,7 +51,7 @@ export class SelfShutdownService {
     // record audit log
     const now = new Date();
     await this.db.insert(shutdownLogs).values({
-      id: randomUUID(), initiatedBy: options.initiatedBy ?? 'admin', dryRun: 0, deleted: options.deleteInstalled ? 1 : 0, details: JSON.stringify(results), createdAt: now,
+      id: randomUUID(), initiatedBy: options.initiatedBy ?? 'admin', dryRun: false, deleted: Boolean(options.deleteInstalled), details: JSON.stringify(results), createdAt: now,
     });
 
     return results;

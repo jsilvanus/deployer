@@ -21,7 +21,7 @@ export class ScheduleService {
       cron: input.cron,
       timezone: input.timezone ?? 'UTC',
       nextRun,
-      enabled: 1,
+      enabled: true,
       retryPolicy: JSON.stringify({}),
       createdBy: input.createdBy,
       createdAt: now,
@@ -32,8 +32,7 @@ export class ScheduleService {
 
   async listForDue(now = new Date()) {
     const rows = await this.db.select().from(schedules);
-    const cutoff = Math.floor(now.getTime() / 1000);
-    return rows.filter(r => r.enabled && r.nextRun && r.nextRun <= cutoff);
+    return rows.filter(r => r.enabled && r.nextRun && r.nextRun <= now);
   }
 
   async listAll() {
@@ -41,7 +40,7 @@ export class ScheduleService {
   }
 
   async listForApp(appId: string) {
-    return this.db.select().from(schedules).where((s) => s.appId.eq(appId));
+    return this.db.select().from(schedules).where(eq(schedules.appId, appId));
   }
 
   async delete(id: string) {
@@ -60,7 +59,7 @@ export class ScheduleService {
     try {
       const it = parseExpression(cronExpr, { tz });
       const next = it.next().toDate();
-      return Math.floor(next.getTime() / 1000);
+      return next;
     } catch (err) {
       return null;
     }

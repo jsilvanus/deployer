@@ -24,7 +24,7 @@ export const gitPullStep: DeploymentStep = {
     const envSvc = new AppEnvService(ctx.db, ctx.config.envEncryptionKey);
     const token    = await envSvc.get(ctx.app.id, '_REGISTRY_TOKEN') ?? undefined;
     const username = await envSvc.get(ctx.app.id, '_REGISTRY_USERNAME') ?? undefined;
-    await git.pull(ctx.app.deployPath, token ? { token, username } : undefined);
+    await git.pull(ctx.app.deployPath, token ? { token, username: username ?? '' } : undefined);
   },
 
   async rollback(ctx: StepContext, snapshot: Record<string, unknown>): Promise<void> {

@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
 import { VersionService } from '../../services/version.service.js';
+import { deployments } from '../../db/schema.js';
+import { eq } from 'drizzle-orm';
 
 export async function versionRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config }) {
   const svc = new VersionService(opts.db, opts.config.versionUpstreamUrl, (opts.config.versionCheckCacheTtlSeconds ?? 3600) * 1000);
@@ -42,7 +44,7 @@ export async function versionRoutes(fastify: FastifyInstance, opts: { db: Db; co
     if (!request.isAdmin && request.scopedAppId !== appId) return reply.code(403).send({ error: 'Forbidden' });
     const q = request.query as any;
     const limit = Math.min(100, q?.limit ? Number(q.limit) : 20);
-    const rows = await opts.db.select().from('deployments' as any).where({ appId }).limit(limit);
+    const rows = await opts.db.select().from(deployments).where(eq(deployments.appId, appId)).limit(limit);
     const items = Array.isArray(rows) ? rows.map(r => ({ id: r.id, version: r.gitCommitAfter ?? r.gitCommitBefore ?? r.operation, source: 'git', ref: r.gitCommitAfter ?? r.gitCommitBefore, deployedAt: r.createdAt, deployedBy: r.triggeredBy })) : [];
     return { items, nextCursor: '' };
   });

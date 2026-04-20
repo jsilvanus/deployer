@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
 import { ScheduleService } from '../../services/schedule.service.js';
+import { scheduleRuns } from '../../db/schema.js';
+import { eq } from 'drizzle-orm';
 
 export async function schedulesRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config }) {
   const svc = new ScheduleService(opts.db);
@@ -30,7 +32,7 @@ export async function schedulesRoutes(fastify: FastifyInstance, opts: { db: Db; 
   fastify.get('/schedules/:id/runs', async (request, reply) => {
     if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
     const { id } = request.params as any;
-    const rows = await opts.db.select().from((await import('../../db/schema.js')).scheduleRuns).where((r) => r.scheduleId.eq(id));
+    const rows = await opts.db.select().from(scheduleRuns).where(eq(scheduleRuns.scheduleId, id));
     return rows;
   });
 }

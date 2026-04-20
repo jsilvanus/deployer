@@ -1,6 +1,8 @@
 import fetch from 'node-fetch';
 import { randomUUID } from 'node:crypto';
 import type { Db } from '../db/client.js';
+import { apps } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
 
 type CacheEntry = { value: unknown; fetchedAt: number };
 
@@ -13,7 +15,7 @@ export class VersionService {
   }
 
   async getLocalVersion(appId: string): Promise<string | null> {
-    const row = await this.db.select().from('apps' as any).where({ id: appId }).limit(1);
+    const row = await this.db.select().from(apps).where(eq(apps.id, appId)).limit(1);
     // fallback: read packageVersion column if present
     const app = Array.isArray(row) ? row[0] : row;
     if (!app) return null;
@@ -34,10 +36,15 @@ export class VersionService {
     try {
       const url = new URL(this.upstreamUrl);
       url.searchParams.set('q', key);
-      const res = await fetch(url.toString(), { method: 'GET', timeout: 5000 });
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(url.toString(), { method: 'GET', signal: controller.signal });
+      clearTimeout(id);
       if (!res.ok) return null;
-      const data = await res.json();
-      const result = (data && (data.latest || data.version)) ? { version: data.latest ?? data.version } : { version: String(data) };
+      const data: unknown = await res.json();
+      const obj = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
+      const versionVal = obj['latest'] ?? obj['version'];
+      const result = versionVal ? { version: String(versionVal) } : { version: String(data) };
       this.cache.set(cacheKey, { value: result, fetchedAt: Date.now() });
       return result;
     } catch {

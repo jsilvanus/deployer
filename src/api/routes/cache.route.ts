@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
+import { apps } from '../../db/schema.js';
+import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 
 export async function cacheRoutes(fastify: FastifyInstance, opts: { db: Db; config: Config }) {
@@ -13,8 +15,8 @@ export async function cacheRoutes(fastify: FastifyInstance, opts: { db: Db; conf
     // For now: clear last-modified cache entry for this app if any and record op
     // Real CDN/proxy purge integration requires provider credentials — admin-only in follow-up
     const opId = randomUUID();
-    // touch apps.last_modified to now
-    await opts.db.update('apps' as any).set({ last_modified: Math.floor(Date.now() / 1000) }).where({ id: appId });
+    // touch apps.lastModified to now
+    await opts.db.update(apps).set({ lastModified: new Date() }).where(eq(apps.id, appId));
     return reply.code(202).send({ operationId: opId, status: 'scheduled' });
   });
 }

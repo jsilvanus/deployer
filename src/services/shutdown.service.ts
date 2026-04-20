@@ -2,19 +2,24 @@ import { Pm2Service } from './pm2.service.js';
 import { DockerService } from './docker.service.js';
 import type { Db } from '../db/client.js';
 import type { AnyLogger } from '../types/logger.js';
+import { apps } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 
 export class ShutdownService {
-  private pm2 = new Pm2Service(console);
-  private docker = new DockerService(console);
+  private pm2: Pm2Service;
+  private docker: DockerService;
 
-  constructor(private db: Db, private config: any, private logger: AnyLogger) {}
+  constructor(private db: Db, private config: any, private logger: AnyLogger) {
+    this.pm2 = new Pm2Service(this.logger);
+    this.docker = new DockerService(this.logger);
+  }
 
   async perform(appId: string, action: string, opts: { actor?: string }): Promise<{ operationId: string; status: string }> {
     const opId = randomUUID();
     this.logger.info({ appId, action, opId }, 'shutdown.perform');
     // Load app to determine runtime
-    const rows = await this.db.select().from('apps' as any).where({ id: appId }).limit(1);
+    const rows = await this.db.select().from(apps).where(eq(apps.id, appId)).limit(1);
     const app = Array.isArray(rows) ? rows[0] : rows;
     if (!app) throw new Error('App not found');
 
@@ -32,7 +37,7 @@ export class ShutdownService {
         }
       }
       // record a simple shutdown log
-      await this.db.insert('shutdown_logs' as any).values({ id: randomUUID(), initiatedBy: opts.actor ?? 'unknown', dryRun: 0, deleted: action === 'destroy' ? 1 : 0, details: JSON.stringify({ action }), createdAt: Math.floor(Date.now() / 1000) });
+      await this.db.insert('shutdown_logs' as any).values({ id: randomUUID(), initiatedBy: opts.actor ?? 'unknown', dryRun: 0, deleted: action === 'destroy' ? 1 : 0, details: JSON.stringify({ action }), createdAt: new Date() });
       return { operationId: opId, status: 'accepted' };
     } catch (err: any) {
       this.logger.error({ err: String(err) }, 'shutdown failed');

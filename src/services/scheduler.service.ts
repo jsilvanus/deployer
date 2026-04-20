@@ -13,6 +13,8 @@ import { deployPypiPlan } from '../core/plans/deploy-pypi.plan.js';
 import { deployImagePlan } from '../core/plans/deploy-image.plan.js';
 import type { Db } from '../db/client.js';
 import type { Config } from '../config.js';
+import { scheduleRuns } from '../db/schema.js';
+import { eq } from 'drizzle-orm';
 
 export class SchedulerService {
   private stopped = false;
@@ -49,20 +51,20 @@ export class SchedulerService {
           const owner = lock.owner;
 
           // record run start
-          const runId = await this.db.insert((await import('../db/schema.js')).scheduleRuns).values({
+          const runId = await this.db.insert(scheduleRuns).values({
             id: require('crypto').randomUUID(),
             scheduleId: s.id,
             status: 'running',
-            startedAt: Math.floor(Date.now() / 1000),
+            startedAt: new Date(),
             details: '{}',
-          }).then(r => r[0]?.id ?? null).catch(() => null);
+          }).then((r: any) => r[0]?.id ?? null).catch(() => null);
 
           try {
             const app = s.appId ? await appSvc.findById(s.appId) : null;
             if (s.type === 'deploy' || s.type === 'update') {
               if (!app) throw new Error('App not found');
               if (await deploymentSvc.hasRunningDeployment(app.id)) throw new Error('Deployment already running');
-              const deployment = await deploymentSvc.create(app.id, s.type === 'deploy' ? 'deploy' : 'update', 'scheduler');
+              const deployment = await deploymentSvc.create(app.id, s.type === 'deploy' ? 'deploy' : 'update', 'mcp');
               const plan = app.type === 'compose' ? deployComposePlan
                          : app.type === 'docker'  ? deployDockerPlan
                          : app.type === 'python'  ? deployPythonPlan
@@ -98,7 +100,7 @@ export class SchedulerService {
               const appName = 'deployer';
               const app = await appSvc.findByName ? await appSvc.findByName(appName) : null;
               if (app) {
-                const deployment = await deploymentSvc.create(app.id, 'update', 'scheduler');
+                const deployment = await deploymentSvc.create(app.id, 'update', 'mcp');
                 const selfUpdatePlan = app.type === 'npm' ? (await import('../core/plans/update-npm.plan.js')).updateNpmPlan : (await import('../core/plans/update-deployer.plan.js')).updateDeployerPlan;
                 setImmediate(() => orchestrator.run(app, deployment.id, selfUpdatePlan, {}).catch((err: unknown) => this.logger.error({ err, deploymentId: deployment.id }, 'Scheduled self-update failed')));
               }
@@ -108,11 +110,11 @@ export class SchedulerService {
             }
 
             // mark run success
-            if (runId) await this.db.update((await import('../db/schema.js')).scheduleRuns).set({ status: 'success', finishedAt: Math.floor(Date.now() / 1000), details: '{}' }).where((r) => r.id.eq(runId));
+            if (runId) await this.db.update(scheduleRuns).set({ status: 'success', finishedAt: new Date(), details: '{}' }).where(eq(scheduleRuns.id, runId));
 
           } catch (err) {
             this.logger.error({ err, scheduleId: s.id }, 'Scheduled task failed');
-            if (runId) await this.db.update((await import('../db/schema.js')).scheduleRuns).set({ status: 'failed', finishedAt: Math.floor(Date.now() / 1000), details: String(err) }).where((r) => r.id.eq(runId));
+            if (runId) await this.db.update(scheduleRuns).set({ status: 'failed', finishedAt: new Date(), details: String(err) }).where(eq(scheduleRuns.id, runId));
           } finally {
             // update nextRun for this schedule
             try {
@@ -121,7 +123,7 @@ export class SchedulerService {
               this.logger.warn({ err, scheduleId: s.id }, 'Failed to update nextRun for schedule');
             }
             // release lock
-            try { await lockSvc.release(s.id, owner); } catch {}
+            try { if (owner) await lockSvc.release(s.id, owner); } catch {}
           }
         }
       } catch (err) {

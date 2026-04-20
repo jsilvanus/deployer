@@ -759,12 +759,7 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
 export function createAndRegisterMcpServer(db: Db, config: Config, logger: AnyLogger) {
   const server = createMcpServer(db, config, logger);
   try {
-    // attempt to register helper tools
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { registerVersionTool } = require('./server.js');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { registerScheduleTools } = require('./server.js');
-    // register with server
+    // register helper tools if available in this module
     if (typeof registerVersionTool === 'function') registerVersionTool(server, db, config, logger);
     if (typeof registerScheduleTools === 'function') registerScheduleTools(server, db);
   } catch {
@@ -775,10 +770,10 @@ export function createAndRegisterMcpServer(db: Db, config: Config, logger: AnyLo
 
 // Auto-register small tools if module consumer wants them
 // Note: callers can also call registerVersionTool/registerScheduleTools explicitly
-export { registerVersionTool, registerScheduleTools };
 
 // Schedule tools
-export function registerScheduleTools(server: any, db: any) {
+export function registerScheduleTools(server: any, db: any, config?: Config, logger?: AnyLogger) {
+  const _logger = logger ?? (console as unknown as AnyLogger);
   const ScheduleService = require('../services/schedule.service.js').ScheduleService;
   const svc = new ScheduleService(db);
 
@@ -831,9 +826,9 @@ export function registerScheduleTools(server: any, db: any) {
       // Simple inline trigger: delegate to scheduler logic (best-effort)
       // For brevity, invoke the same handlers as SchedulerService used (deploy/update/stop/delete/self-update/self-shutdown)
       try {
-        const appSvc = new (require('../services/app.service.js').AppService)(db, config.envEncryptionKey);
+        const appSvc = new (require('../services/app.service.js').AppService)(db, config?.envEncryptionKey ?? '');
         const deploymentSvc = new (require('../services/deployment.service.js').DeploymentService)(db);
-        const orchestrator = new (require('../core/orchestrator.js').DeploymentOrchestrator)(deploymentSvc, logger, config, db);
+        const orchestrator = new (require('../core/orchestrator.js').DeploymentOrchestrator)(deploymentSvc, _logger, config ?? ({} as Config), db);
         const app = schedule.appId ? await appSvc.findById(schedule.appId) : null;
         if (schedule.type === 'deploy' || schedule.type === 'update') {
           if (!app) throw new Error('App not found');
@@ -845,9 +840,9 @@ export function registerScheduleTools(server: any, db: any) {
                      : app.type === 'pypi'    ? require('../core/plans/deploy-pypi.plan.js').deployPypiPlan
                      : app.type === 'image'   ? require('../core/plans/deploy-image.plan.js').deployImagePlan
                      : require('../core/plans/deploy-node.plan.js').deployNodePlan;
-          setImmediate(() => orchestrator.run(app, deployment.id, plan, {}).catch((err) => logger.error({ err, deploymentId: deployment.id }, 'MCP scheduled run failed')));
+          setImmediate(() => orchestrator.run(app, deployment.id, plan, {}).catch((err: unknown) => _logger.error({ err, deploymentId: deployment.id }, 'MCP scheduled run failed')));
         } else if (schedule.type === 'self-shutdown') {
-          const svc = new (require('../services/self-shutdown.service.js').SelfShutdownService)(db, config, logger);
+          const svc = new (require('../services/self-shutdown.service.js').SelfShutdownService)(db, config ?? ({} as Config), _logger);
           await svc.execute({ deleteInstalled: false, initiatedBy: 'mcp' });
         }
       } catch (err) {
@@ -860,7 +855,7 @@ export function registerScheduleTools(server: any, db: any) {
 }
 
 // Add lightweight version check tool at end for MCP consumers
-export function registerVersionTool(server: typeof import('@modelcontextprotocol/sdk/server/mcp.js').McpServer, db: any, config: any, logger: any) {
+export function registerVersionTool(server: McpServer, db: any, config: Config, logger: AnyLogger) {
   const VersionService = require('../services/version.service.js').VersionService;
   server.tool(
     'check_app_version',

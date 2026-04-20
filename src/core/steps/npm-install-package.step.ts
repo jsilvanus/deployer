@@ -59,7 +59,7 @@ export const npmInstallPackageStep: DeploymentStep = {
   },
 
   async rollback(ctx, snapshot): Promise<void> {
-    const { packageName, previousVersion } = snapshot as NpmInstallSnapshot;
+    const { packageName, previousVersion } = snapshot as unknown as NpmInstallSnapshot;
     if (previousVersion && packageName) {
       ctx.logger.info({ packageName, previousVersion }, 'npm rollback: reinstalling previous version');
       await execa('npm', ['install', '--prefix', ctx.app.deployPath, `${packageName}@${previousVersion}`], {
