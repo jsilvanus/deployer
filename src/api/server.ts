@@ -43,6 +43,12 @@ export async function createServer(config: Config, db: Db): Promise<FastifyInsta
     await fastify.register(cors, { origin: origins });
   }
   await fastify.register(authPlugin, { config, db });
+  // Request audit: logs incoming requests for auditing and debugging
+  // Note: registered after auth so `request.isAdmin` and scoped fields are available
+  // Plugin expects `db` in opts
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const requestAudit = (await import('./plugins/request-audit.plugin.js')).default;
+  await fastify.register(requestAudit, { db });
   await fastify.register(healthRoutes);
   await fastify.register(appsRoutes, { db, config, cache });
   await fastify.register(deploymentsRoutes, { db, config, cache });

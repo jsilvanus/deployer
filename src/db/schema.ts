@@ -138,5 +138,16 @@ export const scheduleLocks = sqliteTable('schedule_locks', {
   expiresAt:  integer('expires_at', { mode: 'timestamp' }).notNull(),
 });
 
+export const requestLogs = sqliteTable('request_logs', {
+  id:         text('id').primaryKey(),
+  method:     text('method').notNull(),
+  path:       text('path').notNull(),
+  headers:    text('headers').notNull(),
+  body:       text('body'),
+  statusCode: integer('status_code'),
+  tokenInfo:  text('token_info'),
+  createdAt:  integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 export type AppMetricRow = typeof appMetrics.$inferSelect;
 export type NewAppMetricRow = typeof appMetrics.$inferInsert;

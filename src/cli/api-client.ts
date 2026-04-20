@@ -33,7 +33,7 @@ async function request(method: string, path: string, body?: any) {
   const res = await fetch(url, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: body ? JSON.stringify(body) : null,
     // node-fetch does not support timeout in options in v3; consumers can implement their own timeout
   });
 
