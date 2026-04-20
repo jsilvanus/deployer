@@ -85,11 +85,20 @@ export class DeploymentOrchestrator {
       );
 
       try {
+        // step-level timing
+        let stepEnd: (() => void) | null = null;
+        try {
+          stepEnd = metricsRegistry.getOrCreateHistogram('deployer_step_duration_seconds', 'Step duration seconds', ['step', 'app']).startTimer({ step: step.name, app: app.name });
+        } catch {
+          stepEnd = null;
+        }
+
         await step.execute(ctx);
         const prev = ctx.deployment.completedSteps;
         await this.deploymentSvc.updateStatus(deploymentId, {
           completedSteps: [...prev, step.name],
         });
+        try { if (stepEnd) stepEnd(); } catch {}
         ctx.logger.info({ step: step.name }, 'step completed');
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -103,6 +112,7 @@ export class DeploymentOrchestrator {
         });
 
         try { metricsRegistry.incCounter('deployer_deployments_failed_total', { operation: deployment.operation }); } catch {}
+        try { metricsRegistry.incCounter('deployer_step_failures_total', { step: step.name, app: app.name }); } catch {}
         try { const g = metricsRegistry.getOrCreateGauge('deployer_deployments_active', 'Number of running deployments'); g.dec(); } catch {}
         try { if (endTimer) endTimer(); } catch {}
 
