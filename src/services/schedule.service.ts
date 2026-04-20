@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import cronParser from 'cron-parser';
+import { createRequire } from 'module';
+const cronParser: any = createRequire(import.meta.url)('cron-parser');
 import type { Db } from '../db/client.js';
 import { schedules } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
