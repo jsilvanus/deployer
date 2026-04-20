@@ -6,6 +6,7 @@ import { eq, and } from 'drizzle-orm';
 import { appIdParam } from '../schemas/app.schema.js';
 import type { Db } from '../../db/client.js';
 import type { Config } from '../../config.js';
+import metricsRegistry from '../../services/metrics.registry.js';
 
 function prometheusGauge(name: string, help: string, samples: string[]): string {
   return [
@@ -54,62 +55,29 @@ export async function metricsRoutes(fastify: FastifyInstance, opts: { db: Db; co
 
     const latest = await metricsSvc.latestPerApp();
 
-    // Add DB-derived deployment metrics (fallback counters/gauges)
+    // Prefer prom-client registry output; populate fallback DB-derived gauges into registry first
     const runningRows = await opts.db.select().from(deployments).where(eq(deployments.status, 'running'));
-    const deploymentsActiveSamples: string[] = [];
-    const tsNow = Math.floor(Date.now());
-    deploymentsActiveSamples.push(`deployer_deployments_active ${runningRows.length} ${tsNow}`);
+    metricsRegistry.setGaugeValue('deployer_deployments_active', { }, runningRows.length);
 
-    const deploymentTotalSamples: string[] = [];
-    const deploymentFailedSamples: string[] = [];
     const ops: Array<'deploy' | 'update' | 'rollback'> = ['deploy', 'update', 'rollback'];
     for (const op of ops) {
       const totalRows = await opts.db.select().from(deployments).where(eq(deployments.operation, op));
       const failedRows = await opts.db.select().from(deployments).where(and(eq(deployments.operation, op), eq(deployments.status, 'failed')));
-      deploymentTotalSamples.push(`deployer_deployments_total{operation="${op}"} ${totalRows.length} ${tsNow}`);
-      deploymentFailedSamples.push(`deployer_deployments_failed_total{operation="${op}"} ${failedRows.length} ${tsNow}`);
+      metricsRegistry.setGaugeValue('deployer_deployments_total', { operation: op }, totalRows.length);
+      metricsRegistry.setGaugeValue('deployer_deployments_failed_total', { operation: op }, failedRows.length);
     }
-
-    const statusSamples: string[] = [];
-    const cpuSamples: string[] = [];
-    const memSamples: string[] = [];
-    const stateSamples: string[] = [];
-    const updatingSamples: string[] = [];
 
     for (const [, m] of latest) {
-      const l = label(m.appName, m.appType);
-      const ts = m.timestamp * 1000;
-      statusSamples.push(`deployer_app_status{${l}} ${m.status === 'running' ? 1 : 0} ${ts}`);
-      // labelled state metric (canonical enumerated state)
-      const state = (m.status ?? 'unknown').replace(/"/g, '\\"');
-      stateSamples.push(`deployer_app_state{${l},state="${state}"} 1 ${ts}`);
-      // convenience boolean gauge for 'updating' to simplify alerting
-      updatingSamples.push(`deployer_app_updating{${l}} ${m.status === 'updating' ? 1 : 0} ${ts}`);
-      if (m.cpu != null)      cpuSamples.push(`deployer_app_cpu_percent{${l}} ${m.cpu.toFixed(2)} ${ts}`);
-      if (m.memoryMb != null) memSamples.push(`deployer_app_memory_mb{${l}} ${m.memoryMb.toFixed(2)} ${ts}`);
+      const labels = { app: m.appName, type: m.appType } as Record<string, string>;
+      metricsRegistry.setGaugeValue('deployer_app_status', { ...labels }, m.status === 'running' ? 1 : 0);
+      metricsRegistry.setGaugeValue('deployer_app_updating', { ...labels }, m.status === 'updating' ? 1 : 0);
+      metricsRegistry.setGaugeValue('deployer_app_cpu_percent', { ...labels }, m.cpu ?? 0);
+      metricsRegistry.setGaugeValue('deployer_app_memory_mb', { ...labels }, m.memoryMb ?? 0);
+      const state = (m.status ?? 'unknown');
+      metricsRegistry.setGaugeValue('deployer_app_state', { ...labels, state }, 1);
     }
 
-    const body = [
-      prometheusGauge('deployer_deployments_active', 'Number of running deployments', deploymentsActiveSamples),
-      prometheusGauge('deployer_deployments_total', 'Total deployments by operation', deploymentTotalSamples),
-      prometheusGauge('deployer_deployments_failed_total', 'Failed deployments by operation', deploymentFailedSamples),
-      // deployment DB-derived metrics above; app-level metrics below
-      prometheusGauge('deployer_app_state',
-        'Current app state (labelled: state="running"|"updating"|...)',
-        stateSamples),
-      prometheusGauge('deployer_app_updating',
-        '1=updating',
-        updatingSamples),
-      prometheusGauge('deployer_app_status',
-        'Current app status: 1=running 0=other',
-        statusSamples),
-      prometheusGauge('deployer_app_cpu_percent',
-        'CPU usage percent (averaged across services for docker/compose)',
-        cpuSamples),
-      prometheusGauge('deployer_app_memory_mb',
-        'Memory usage in MiB (summed across services for docker/compose)',
-        memSamples),
-    ].join('\n\n') + '\n';
+    const body = await metricsRegistry.getMetricsText();
 
     return reply
       .header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
