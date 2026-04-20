@@ -11,6 +11,7 @@ import { spawn } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
+import * as CliClient from './cli-client.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -48,30 +49,52 @@ function printUsage() {
 }
 
 async function proxyApiCall(method, path, body) {
-  // Ensure env and admin token are loaded
-  loadDotEnv();
-  const port = process.env.DEPLOYER_PORT || '3000';
-  const token = process.env.DEPLOYER_ADMIN_TOKEN;
-  if (!token) {
-    console.error('DEPLOYER_ADMIN_TOKEN not found in environment or .env — cannot call API');
-    process.exit(2);
-  }
-  const url = `http://127.0.0.1:${port}${path}`;
-  const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+  // Keep proxyApiCall for backward compatibility; delegate to bin/cli-client when possible.
   try {
-    const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
-    const text = await res.text();
-    let parsed;
-    try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
-    if (!res.ok) {
-      console.error(`API ${method} ${path} failed: ${res.status} ${res.statusText}`);
-      console.error(parsed ?? text);
-      process.exit(3);
+    if (method === 'POST' && path === '/apps') {
+      const res = await CliClient.createApp(body);
+      console.log(JSON.stringify(res, null, 2));
+      return;
     }
-    console.log(parsed ?? text ?? `${res.status} ${res.statusText}`);
+    if (method === 'PATCH' && path.startsWith('/apps/')) {
+      const appId = path.split('/')[2];
+      const res = await CliClient.updateApp(appId, body);
+      console.log(JSON.stringify(res, null, 2));
+      return;
+    }
+    if (method === 'DELETE' && path.startsWith('/apps/')) {
+      const appId = path.split('/')[2];
+      const res = await CliClient.deleteApp(appId);
+      console.log(JSON.stringify(res, null, 2));
+      return;
+    }
   } catch (err) {
-    console.error(`Error calling API: ${err?.message ?? err}`);
-    process.exit(4);
+    // Fall back to original simple fetch behavior if CliClient fails
+    try {
+      loadDotEnv();
+      const port = process.env.DEPLOYER_PORT || '3000';
+      const token = process.env.DEPLOYER_ADMIN_TOKEN;
+      if (!token) {
+        console.error('DEPLOYER_ADMIN_TOKEN not found in environment or .env — cannot call API');
+        process.exit(2);
+      }
+      const url = `http://127.0.0.1:${port}${path}`;
+      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+      const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+      const text = await res.text();
+      let parsed;
+      try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
+      if (!res.ok) {
+        console.error(`API ${method} ${path} failed: ${res.status} ${res.statusText}`);
+        console.error(parsed ?? text);
+        process.exit(3);
+      }
+      console.log(parsed ?? text ?? `${res.status} ${res.statusText}`);
+      return;
+    } catch (e) {
+      console.error(`Error calling API: ${err?.message ?? err}`);
+      process.exit(4);
+    }
   }
 }
 
@@ -116,24 +139,70 @@ if (cmd === 'setup') {
     stdio: 'inherit',
     env: process.env,
   }).on('exit', (code) => process.exit(code ?? 0));
-} else if (cmd === 'add' || cmd === 'update' || cmd === 'remove') {
-  // Lightweight CLI that calls the local Deployer API using DEPLOYER_ADMIN_TOKEN
+} else if (['add','update','remove','list','get','deploy','rollback','status','logs','metrics'].includes(cmd)) {
   const sub = cmd;
   (async () => {
-    if (sub === 'add') {
-      const body = readJsonArg(process.argv[3], process.argv.slice(4));
-      await proxyApiCall('POST', '/setup/self-register' in {} ? '/apps' : '/apps', body);
-    } else if (sub === 'update') {
-      const appId = process.argv[3];
-      if (!appId) { console.error('update requires <appId> <json|@file>'); printUsage(); process.exit(2); }
-      const body = readJsonArg(process.argv[4], process.argv.slice(5));
-      await proxyApiCall('PATCH', `/apps/${encodeURIComponent(appId)}`, body);
-    } else if (sub === 'remove') {
-      const appId = process.argv[3];
-      if (!appId) { console.error('remove requires <appId>'); printUsage(); process.exit(2); }
-      await proxyApiCall('DELETE', `/apps/${encodeURIComponent(appId)}`);
+    try {
+      if (sub === 'add') {
+        const body = readJsonArg(process.argv[3], process.argv.slice(4));
+        const res = await CliClient.createApp(body);
+        console.log(JSON.stringify(res, null, 2));
+      } else if (sub === 'update') {
+        const appId = process.argv[3];
+        if (!appId) { console.error('update requires <appId> <json|@file>'); printUsage(); process.exit(2); }
+        const body = readJsonArg(process.argv[4], process.argv.slice(5));
+        const res = await CliClient.updateApp(appId, body);
+        console.log(JSON.stringify(res, null, 2));
+      } else if (sub === 'remove') {
+        const appId = process.argv[3];
+        if (!appId) { console.error('remove requires <appId>'); printUsage(); process.exit(2); }
+        const res = await CliClient.deleteApp(appId);
+        console.log(JSON.stringify(res, null, 2));
+      } else if (sub === 'list') {
+        const res = await CliClient.listApps();
+        console.log(JSON.stringify(res, null, 2));
+      } else if (sub === 'get') {
+        const appId = process.argv[3];
+        if (!appId) { console.error('get requires <appId>'); printUsage(); process.exit(2); }
+        const res = await CliClient.getApp(appId);
+        console.log(JSON.stringify(res, null, 2));
+      } else if (sub === 'deploy') {
+        const appId = process.argv[3];
+        if (!appId) { console.error('deploy requires <appId>'); printUsage(); process.exit(2); }
+        const payload = {};
+        // simple flags parsing for --allow-db-drop
+        if (process.argv.includes('--allow-db-drop')) payload.allowDbDrop = true;
+        const res = await CliClient.deployApp(appId, payload);
+        console.log(JSON.stringify(res, null, 2));
+      } else if (sub === 'rollback') {
+        const appId = process.argv[3];
+        const deploymentId = process.argv[4];
+        if (!appId || !deploymentId) { console.error('rollback requires <appId> <deploymentId>'); printUsage(); process.exit(2); }
+        const res = await CliClient.rollbackDeployment(deploymentId, {});
+        console.log(JSON.stringify(res, null, 2));
+      } else if (sub === 'status') {
+        const appId = process.argv[3];
+        if (!appId) { console.error('status requires <appId>'); printUsage(); process.exit(2); }
+        const res = await CliClient.getStatus(appId);
+        console.log(JSON.stringify(res, null, 2));
+      } else if (sub === 'logs') {
+        const appId = process.argv[3];
+        if (!appId) { console.error('logs requires <appId>'); printUsage(); process.exit(2); }
+        const params = {};
+        if (process.argv.includes('--follow')) params.follow = true;
+        const res = await CliClient.getLogs(appId, params);
+        console.log(JSON.stringify(res, null, 2));
+      } else if (sub === 'metrics') {
+        const appId = process.argv[3];
+        if (!appId) { console.error('metrics requires <appId>'); printUsage(); process.exit(2); }
+        const res = await CliClient.getMetrics(appId, {});
+        console.log(JSON.stringify(res, null, 2));
+      }
+      process.exit(0);
+    } catch (e) {
+      console.error('CLI command failed:', e?.message ?? e);
+      process.exit(3);
     }
-    process.exit(0);
   })();
 } else {
   console.error(`deployer: unknown command "${cmd}"\n`);
