@@ -55,6 +55,35 @@ export function createMcpServer(db: Db, config: Config, logger: AnyLogger): McpS
     version: VERSION,
   });
 
+  // Instrument MCP tool handlers: wrap server.tool to record counts and durations
+  try {
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore - dynamic wrapper
+    const origTool = server.tool.bind(server);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    server.tool = (name: string, description: string, schema: any, handler: any) => {
+      const wrapped = async (input: any) => {
+        const hist = (await import('../services/metrics.registry.js')).default.getOrCreateHistogram('mcp_request_duration_seconds', 'MCP request duration seconds', ['tool']);
+        const end = hist.startTimer({ tool: name });
+        try {
+          const result = await handler(input);
+          // success counter
+          try { (await import('../services/metrics.registry.js')).default.getOrCreateCounter('mcp_requests_total', 'MCP requests total', ['tool']).inc({ tool: name }, 1); } catch {}
+          return result;
+        } catch (err) {
+          try { (await import('../services/metrics.registry.js')).default.incCounter('mcp_requests_failed_total', { tool: name }); } catch {}
+          throw err;
+        } finally {
+          try { end(); } catch {}
+        }
+      };
+      return origTool(name, description, schema, wrapped);
+    };
+  } catch {
+    // ignore instrumentation failures
+  }
+
   const appSvc = new AppService(db, config.envEncryptionKey);
   const deploymentSvc = new DeploymentService(db);
   const migSvc = new MigrationService(logger);
