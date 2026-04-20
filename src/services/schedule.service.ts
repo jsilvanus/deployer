@@ -20,7 +20,7 @@ export class ScheduleService {
       payload: JSON.stringify(input.payload ?? {}),
       cron: input.cron,
       timezone: input.timezone ?? 'UTC',
-      nextRun,
+      nextRun: nextRun !== null ? new Date(nextRun * 1000) : null,
       enabled: true,
       retryPolicy: JSON.stringify({}),
       createdBy: input.createdBy,
@@ -30,7 +30,7 @@ export class ScheduleService {
     return id;
   }
 
-  async listForDue(now = new Date()) {
+  async listForDue(now = new Date()): Promise<typeof schedules.$inferSelect[]> {
     const rows = await this.db.select().from(schedules);
     const nowSec = Math.floor(now.getTime() / 1000);
     function nextRunToSeconds(v: unknown): number | null {
@@ -47,31 +47,31 @@ export class ScheduleService {
     });
   }
 
-  async listAll() {
+  async listAll(): Promise<typeof schedules.$inferSelect[]> {
     return this.db.select().from(schedules);
   }
 
-  async listForApp(appId: string) {
+  async listForApp(appId: string): Promise<typeof schedules.$inferSelect[]> {
     return this.db.select().from(schedules).where(eq(schedules.appId, appId));
   }
 
-  async delete(id: string) {
+  async delete(id: string): Promise<void> {
     await this.db.delete(schedules).where(eq(schedules.id, id));
   }
 
-  async updateNextRun(id: string) {
+  async updateNextRun(id: string): Promise<number | null> {
     const [row] = await this.db.select().from(schedules).where(eq(schedules.id, id)).limit(1);
     if (!row) return null;
     const next = this.computeNextRun(row.cron, row.timezone ?? 'UTC');
-    await this.db.update(schedules).set({ nextRun: next, updatedAt: new Date() }).where(eq(schedules.id, id));
+    await this.db.update(schedules).set({ nextRun: next !== null ? new Date(next * 1000) : null, updatedAt: new Date() }).where(eq(schedules.id, id));
     return next;
   }
 
-  computeNextRun(cronExpr: string, tz: string) {
+  computeNextRun(cronExpr: string, tz: string): number | null {
     try {
       const it = parseExpression(cronExpr, { tz });
-      const next = it.next().toDate();
-      return Math.floor(next.getTime() / 1000);
+          const next = it.next().toDate();
+          return Math.floor(next.getTime() / 1000);
     } catch (err) {
       return null;
     }
