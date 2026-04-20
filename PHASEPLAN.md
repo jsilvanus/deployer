@@ -49,8 +49,9 @@ Config & environment → App detection → Container templates → Compose gener
 - [x] Support optional `NODE_ENV`, build args, and package-lock handling
 
 **Stream B — Python / PyPI Dockerfile**
-- Dockerfile that creates a venv, installs via `pip install .` or `pip install -r requirements.txt`, supports `gunicorn`/`uvicorn` entrypoints
-- Handle `pyproject.toml` builds (PEP 517) and editable installs for dev
+**Stream B — Python / PyPI Dockerfile** ✅
+- [x] Dockerfile that creates a venv, installs via `pip install .` or `pip install -r requirements.txt`, supports `gunicorn`/`uvicorn` entrypoints
+- [x] Handle `pyproject.toml` builds (PEP 517) and editable installs for dev
 
 **Stream C — Common helper scripts**
 - Image build wrapper, labels for Deployer metadata, healthcheck template, and image tag conventions

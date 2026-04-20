@@ -19,6 +19,23 @@ Checkpoint verified:
 Deviations: none.
 
 ---
+## 2026-04-20T00:30:00Z — Phase 2 Stream B closed ✅
+Related PhasePlan: PHASEPLAN.md
+PhasePlan-Snapshot: 0c4e11825bc3da12ab4c62438b049e51ddef40da
+PhasePlan-ArchivedAt: 2026-04-20T00:30:00Z
+Execution-ID: 20260420T003000Z-004
+
+Owned files:
+- src/templates/python.dockerfile.ts
+- test/template.python.test.ts
+
+Checkpoint verified:
+- Template generates pep517 and requirements-based flows ✓
+- Unit tests for Python template pass ✓
+
+Deviations: none.
+
+---
 ## 2026-04-20T00:10:00Z — Phase 1 closed ✅ 🔒
 Related PhasePlan: PHASEPLAN.md
 PhasePlan-Snapshot: 5ee5534cc224fd49f81baa2f46b7a9e49e117e54
