@@ -288,8 +288,8 @@ if (cmd === 'setup') {
           } catch (e) {
             console.error('self-shutdown failed:', e?.message ?? e);
             process.exit(3);
-      }
-      process.exit(0);
+          }
+          process.exit(0);
     } catch (e) {
       console.error('CLI command failed:', e?.message ?? e);
       process.exit(3);
