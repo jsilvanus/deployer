@@ -1,6 +1,6 @@
 {
   "name": "@jsilvanus/deployer",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Self-hosted deployment orchestrator — REST API and MCP server for reversible deployment of Node.js, Python, and Docker apps",
   "type": "module",
   "main": "dist/index.js",
