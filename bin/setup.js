@@ -71,6 +71,7 @@ function getArg(name) {
 // Defaults to /srv/deployer unless overridden with --install-dir.
 const installDir = getArg('--install-dir') || '/srv/deployer';
 const installedRun = args.includes('--migrated-from-install');
+const skipEnvFlag = args.includes('--no-replace-env') || args.includes('--skip-env');
 
 if (!installedRun) {
   // If we're not already running from an installed copy, ensure a
@@ -88,6 +89,22 @@ if (!installedRun) {
       const installCmd = `npm install --prefix ${installDir} @jsilvanus/deployer --no-save --unsafe-perm`;
       const ir = run(installCmd, { stdio: 'inherit' });
       if (ir.status !== 0) die('npm install into install-dir failed');
+    }
+    // Ensure the installed package is available at the install root (copy package files
+    // from node_modules/@jsilvanus/deployer into the installDir). This makes a layout
+    // like a checked-out repo so the setup script and other tools can operate from
+    // the install root (/srv/deployer) rather than buried under node_modules.
+    try {
+      const installedPkg = resolve(installDir, 'node_modules', '@jsilvanus', 'deployer');
+      // Copy files into installDir root. Use rsync when available for efficiency.
+      if (run(`command -v rsync`).status === 0) {
+        run(`rsync -a ${installedPkg}/ ${installDir}/`);
+      } else {
+        run(`cp -a ${installedPkg}/. ${installDir}/`);
+      }
+      ok(`Installed package contents copied to ${installDir}`);
+    } catch (err) {
+      warn(`Could not copy installed package into ${installDir}: ${String(err)}`);
     }
 
     // Re-exec the installed setup script with a marker to avoid recursion.
@@ -206,13 +223,19 @@ const envPath = resolve(ROOT, '.env');
 let skipEnv = false;
 
 if (existsSync(envPath)) {
-  const answer = await ask(
-    `  ${c.yellow}⚠${c.reset}  .env already exists. Overwrite? ${c.dim}(y/N)${c.reset} `
-  );
-  if (answer.toLowerCase() !== 'y') {
-    info('Keeping existing .env — skipping secret generation.');
+  if (skipEnvFlag) {
+    info('Skipping existing .env overwrite (--no-replace-env) — keeping current .env.');
     skipEnv = true;
     console.log();
+  } else {
+    const answer = await ask(
+      `  ${c.yellow}⚠${c.reset}  .env already exists. Overwrite? ${c.dim}(y/N)${c.reset} `
+    );
+    if (answer.toLowerCase() !== 'y') {
+      info('Keeping existing .env — skipping secret generation.');
+      skipEnv = true;
+      console.log();
+    }
   }
 }
 
