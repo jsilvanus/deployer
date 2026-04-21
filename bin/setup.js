@@ -391,11 +391,27 @@ console.log();
 
 // Configure PM2 to auto-start on boot using systemd
 console.log(`${c.bold}  Configuring PM2 to start on boot (systemd)${c.reset}`);
-try {
+  try {
   const startupCmd = `${pm2Bin} startup systemd -u ${deployUser} --hp ${deployUserHome}`;
-  const sr = run(startupCmd, { stdio: 'inherit' });
+  // Run pm2 startup and capture its output; pm2 often prints a systemctl command to run.
+  const sr = run(startupCmd);
+  const out = (sr.stdout || '') + (sr.stderr || '');
   if (sr.status !== 0) {
     warn('pm2 startup command returned a non-zero exit. You may need to run it manually.');
+  } else {
+    // Look for a suggested systemctl command in pm2 output and execute it (remove leading sudo if present)
+    const m = out.match(/(?:sudo\s+)?(.+?systemctl.+?(?:enable|daemon-reload|start)[^\n]*)/i);
+    if (m && m[1]) {
+      const suggested = m[1].trim();
+      info(`Applying generated systemd command from pm2 startup: ${suggested}`);
+      try {
+        // Run the command as-is (we are running under sudo in setup)
+        const runRes = run(suggested, { stdio: 'inherit' });
+        if (runRes.status !== 0) warn(`Generated systemd command returned non-zero: ${runRes.status}`);
+      } catch (err) {
+        warn(`Failed to run generated systemd command: ${String(err)}`);
+      }
+    }
   }
 
   // systemctl unit name pattern used by PM2: pm2-<user>.service
