@@ -243,7 +243,7 @@ if (cmd === 'setup') {
         if (!appId) { console.error('metrics requires <appId>'); printUsage(); process.exit(2); }
         const res = await CliClient.getMetrics(appId, {});
         console.log(JSON.stringify(res, null, 2));
-        } else if (sub === 'self-update') {
+      } else if (sub === 'self-update') {
           const nameIdx = process.argv.indexOf('--name');
           const name = nameIdx !== -1 ? process.argv[nameIdx+1] : undefined;
           const wait = process.argv.includes('--wait');
