@@ -66,7 +66,7 @@ export async function getLogs(appId, params) {
     let buffer = '';
     for await (const chunk of body) {
       buffer += decoder.decode(chunk, { stream: true });
-      let idx: number;
+      let idx;
       while ((idx = buffer.indexOf('\n')) !== -1) {
         const line = buffer.slice(0, idx).trim();
         buffer = buffer.slice(idx + 1);

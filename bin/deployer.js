@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 /**
- * Main CLI entry point for @jsilvanus/deployer.
- *
- *   deployer              Start the server (reads .env from cwd if present)
- *   deployer start        Same as above
- *   deployer setup [...]  Run the interactive bare-metal setup wizard (requires sudo)
+ * Simplified CLI entry for @jsilvanus/deployer.
+ * Keeps the original behavior but with a clearer, balanced implementation.
  */
 
 import { spawn } from 'node:child_process';
@@ -15,288 +12,114 @@ import * as CliClient from './cli-client.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Load .env from the current working directory into process.env.
-// Variables already set in the environment take precedence.
 function loadDotEnv() {
   try {
     const content = readFileSync(resolve(process.cwd(), '.env'), 'utf8');
     for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eq = trimmed.indexOf('=');
+      const t = line.trim();
+      if (!t || t.startsWith('#')) continue;
+      const eq = t.indexOf('=');
       if (eq === -1) continue;
-      const key = trimmed.slice(0, eq).trim();
-      const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
-      if (!(key in process.env)) process.env[key] = val;
+      const k = t.slice(0, eq).trim();
+      const v = t.slice(eq + 1).trim().replace(/^['"]|['"]$/g, '');
+      if (!(k in process.env)) process.env[k] = v;
     }
-  } catch { /* no .env — rely on process.env */ }
+  } catch {}
 }
 
-const cmd = process.argv[2];
-
-// If no command provided, show usage help and exit successfully.
-if (!cmd) {
-  printUsage();
-  process.exit(0);
-}
 function printUsage() {
   console.log('Usage:');
-  console.log('  deployer server                   Start the deployer server');
-  console.log('  deployer setup [opts]             Run the bare-metal setup wizard (requires sudo)');
-  console.log('  deployer add <json|@file>         Create an app (body JSON or @file.json)');
-  console.log('  deployer update <appId> <json|@file>  Update an app');
-  console.log('  deployer remove <appId>           Delete an app');
-    console.log('  deployer self-update [--name <appName>] [--wait]   Trigger self-update for the deployer');
-    console.log('  deployer self-shutdown [--dry-run] [--delete] [--confirm-token <token>]  Admin-only self-shutdown');
-}
-
-async function proxyApiCall(method, path, body) {
-  // Keep proxyApiCall for backward compatibility; delegate to bin/cli-client when possible.
-  try {
-    if (method === 'POST' && path === '/apps') {
-      const res = await CliClient.createApp(body);
-      console.log(JSON.stringify(res, null, 2));
-      return;
-    }
-    if (method === 'PATCH' && path.startsWith('/apps/')) {
-      const appId = path.split('/')[2];
-      const res = await CliClient.updateApp(appId, body);
-      console.log(JSON.stringify(res, null, 2));
-      return;
-    }
-    if (method === 'DELETE' && path.startsWith('/apps/')) {
-      const appId = path.split('/')[2];
-      const res = await CliClient.deleteApp(appId);
-      console.log(JSON.stringify(res, null, 2));
-      return;
-    }
-  } catch (err) {
-    // Fall back to original simple fetch behavior if CliClient fails
-    try {
-      loadDotEnv();
-      const port = process.env.DEPLOYER_PORT || '3000';
-      const token = process.env.DEPLOYER_ADMIN_TOKEN;
-      if (!token) {
-        console.error('DEPLOYER_ADMIN_TOKEN not found in environment or .env — cannot call API');
-        process.exit(2);
-      }
-      const url = `http://127.0.0.1:${port}${path}`;
-      const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
-      const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
-      const text = await res.text();
-      let parsed;
-      try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
-      if (!res.ok) {
-        console.error(`API ${method} ${path} failed: ${res.status} ${res.statusText}`);
-        console.error(parsed ?? text);
-        process.exit(3);
-      }
-      console.log(parsed ?? text ?? `${res.status} ${res.statusText}`);
-      return;
-    } catch (e) {
-      console.error(`Error calling API: ${err?.message ?? err}`);
-      process.exit(4);
-    }
-  }
+  console.log('  deployer server');
+  console.log('  deployer setup [opts]');
+  console.log('  deployer add <json|@file>');
+  console.log('  deployer update <appId> <json|@file>');
+  console.log('  deployer remove <appId>');
+  console.log('  deployer list|get|deploy|rollback|status|logs|metrics');
+  console.log('  deployer self-update [--name <appName>] [--wait]');
+  console.log('  deployer self-shutdown [--dry-run] [--delete] [--confirm-token <token>]');
 }
 
 function readJsonArg(arg, rest) {
-  // arg can be a JSON string, or @filename to read JSON from file
   const { existsSync, readFileSync } = require('node:fs');
   if (!arg) return null;
   if (arg.startsWith('@')) {
     const p = arg.slice(1);
-    if (!existsSync(p)) {
-      console.error(`File not found: ${p}`);
-      process.exit(2);
-    }
-    try {
-      return JSON.parse(readFileSync(p, 'utf8'));
-    } catch (e) {
-      console.error(`Invalid JSON in ${p}: ${e.message}`);
-      process.exit(2);
-    }
+    if (!existsSync(p)) { console.error(`File not found: ${p}`); process.exit(2); }
+    try { return JSON.parse(readFileSync(p, 'utf8')); } catch (e) { console.error(`Invalid JSON in ${p}: ${e.message}`); process.exit(2); }
   }
-  // If arg looks like JSON, parse it; otherwise try to join rest as JSON
   if (arg.trim().startsWith('{') || arg.trim().startsWith('[')) {
     try { return JSON.parse(arg); } catch (e) { console.error('Invalid JSON:', e.message); process.exit(2); }
   }
   if (rest && rest.length > 0) {
     const joined = [arg, ...rest].join(' ');
-    try { return JSON.parse(joined); } catch { /* fallthrough */ }
+    try { return JSON.parse(joined); } catch {}
   }
-  console.error('Expected JSON body or @file.json');
-  process.exit(2);
+  console.error('Expected JSON body or @file.json'); process.exit(2);
 }
 
-if (cmd === 'setup') {
-  // Forward all remaining args to the interactive setup wizard
-  spawn('node', [resolve(__dirname, 'setup.js'), ...process.argv.slice(3)], {
-    stdio: 'inherit',
-  }).on('exit', (code) => process.exit(code ?? 0));
-} else if (cmd === 'server' || cmd === 'start') {
-  // Start server explicitly
-  loadDotEnv();
-  spawn('node', [resolve(__dirname, '..', 'dist', 'index.js')], {
-    stdio: 'inherit',
-    env: process.env,
-  }).on('exit', (code) => process.exit(code ?? 0));
-} else if (['add','update','remove','list','get','deploy','rollback','status','logs','metrics'].includes(cmd)) {
+async function main() {
+  const cmd = process.argv[2];
+  if (!cmd) { printUsage(); process.exit(0); }
+  if (cmd === '--help' || cmd === '-h') { printUsage(); process.exit(0); }
+
+  if (cmd === 'setup') {
+    spawn('node', [resolve(__dirname, 'setup.js'), ...process.argv.slice(3)], { stdio: 'inherit' }).on('exit', c => process.exit(c ?? 0));
+    return;
+  }
+  if (cmd === 'server' || cmd === 'start') {
+    loadDotEnv();
+    spawn('node', [resolve(__dirname, '..', 'dist', 'index.js')], { stdio: 'inherit', env: process.env }).on('exit', c => process.exit(c ?? 0));
+    return;
+  }
+
+  // Other commands that proxy to the running API
   const sub = cmd;
-  (async () => {
-    try {
-      if (sub === 'add') {
-        const body = readJsonArg(process.argv[3], process.argv.slice(4));
-        const res = await CliClient.createApp(body);
-        console.log(JSON.stringify(res, null, 2));
-      } else if (sub === 'update') {
-        const appId = process.argv[3];
-        if (!appId) { console.error('update requires <appId> <json|@file>'); printUsage(); process.exit(2); }
-        const body = readJsonArg(process.argv[4], process.argv.slice(5));
-        const res = await CliClient.updateApp(appId, body);
-        console.log(JSON.stringify(res, null, 2));
-      } else if (sub === 'remove') {
-        const appId = process.argv[3];
-        if (!appId) { console.error('remove requires <appId>'); printUsage(); process.exit(2); }
-        const res = await CliClient.deleteApp(appId);
-        console.log(JSON.stringify(res, null, 2));
-      } else if (sub === 'list') {
-        const res = await CliClient.listApps();
-        console.log(JSON.stringify(res, null, 2));
-      } else if (sub === 'get') {
-        const appId = process.argv[3];
-        if (!appId) { console.error('get requires <appId>'); printUsage(); process.exit(2); }
-        const res = await CliClient.getApp(appId);
-        console.log(JSON.stringify(res, null, 2));
-      } else if (sub === 'deploy') {
-        const appId = process.argv[3];
-        if (!appId) { console.error('deploy requires <appId>'); printUsage(); process.exit(2); }
-        const payload = {};
-        // simple flags parsing for --allow-db-drop
-        if (process.argv.includes('--allow-db-drop')) payload.allowDbDrop = true;
-        const wait = process.argv.includes('--wait');
-        const res = await CliClient.deployApp(appId, payload);
-        console.log(JSON.stringify(res, null, 2));
-        if (wait && res?.deploymentId) {
-          const id = res.deploymentId;
-          process.stdout.write(`Waiting for deployment ${id}...\n`);
-          for (;;) {
-            await new Promise(r => setTimeout(r, 2000));
-            try {
-              const status = await CliClient.getDeployment(id);
-              process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`);
-              if (['success','failed','rolled_back'].includes(status.status)) {
-                process.stdout.write(`Deployment finished: ${status.status}\n`);
-                break;
-              }
-            } catch (e) {
-              process.stderr.write(`Error polling deployment: ${e?.message ?? e}\n`);
-            }
-          }
-        }
-      } else if (sub === 'rollback') {
-        const appId = process.argv[3];
-        const deploymentId = process.argv[4];
-        if (!appId || !deploymentId) { console.error('rollback requires <appId> <deploymentId>'); printUsage(); process.exit(2); }
-        const wait = process.argv.includes('--wait');
-        const res = await CliClient.rollbackDeployment(deploymentId, {});
-        console.log(JSON.stringify(res, null, 2));
-        if (wait && res?.deploymentId) {
-          const id = res.deploymentId;
-          process.stdout.write(`Waiting for rollback deployment ${id}...\n`);
-          for (;;) {
-            await new Promise(r => setTimeout(r, 2000));
-            try {
-              const status = await CliClient.getDeployment(id);
-              process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`);
-              if (['success','failed','rolled_back'].includes(status.status)) {
-                process.stdout.write(`Rollback finished: ${status.status}\n`);
-                break;
-              }
-            } catch (e) {
-              process.stderr.write(`Error polling rollback deployment: ${e?.message ?? e}\n`);
-            }
-          }
-        }
-      } else if (sub === 'status') {
-        const appId = process.argv[3];
-        if (!appId) { console.error('status requires <appId>'); printUsage(); process.exit(2); }
-        const res = await CliClient.getStatus(appId);
-        console.log(JSON.stringify(res, null, 2));
-      } else if (sub === 'logs') {
-        const appId = process.argv[3];
-        if (!appId) { console.error('logs requires <appId>'); printUsage(); process.exit(2); }
-        const params = {};
-        if (process.argv.includes('--follow')) {
-          params.follow = true;
-          await CliClient.getLogs(appId, params);
-        } else {
-          if (process.argv.includes('--since')) {
-            const idx = process.argv.indexOf('--since');
-            params.since = process.argv[idx+1];
-          }
-          const res = await CliClient.getLogs(appId, params);
-          console.log(JSON.stringify(res, null, 2));
-        }
-      } else if (sub === 'metrics') {
-        const appId = process.argv[3];
-        if (!appId) { console.error('metrics requires <appId>'); printUsage(); process.exit(2); }
-        const res = await CliClient.getMetrics(appId, {});
-        console.log(JSON.stringify(res, null, 2));
-      } else if (sub === 'self-update') {
-          const nameIdx = process.argv.indexOf('--name');
-          const name = nameIdx !== -1 ? process.argv[nameIdx+1] : undefined;
-          const wait = process.argv.includes('--wait');
-          try {
-            const res = await CliClient.selfUpdate(name);
-            console.log(JSON.stringify(res, null, 2));
-            if (wait && res?.deploymentId) {
-              const id = res.deploymentId;
-              process.stdout.write(`Waiting for deployment ${id}...\n`);
-              for (;;) {
-                await new Promise(r => setTimeout(r, 2000));
-                try {
-                  const status = await CliClient.getDeployment(id);
-                  process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`);
-                  if (['success','failed','rolled_back'].includes(status.status)) {
-                    process.stdout.write(`Deployment finished: ${status.status}\n`);
-                    break;
-                  }
-                } catch (e) {
-                  process.stderr.write(`Error polling deployment: ${e?.message ?? e}\n`);
-                }
-              }
-            }
-          } catch (e) {
-            console.error('self-update failed:', e?.message ?? e);
-            process.exit(3);
-          }
-        } else if (sub === 'self-shutdown') {
-          // flags: --dry-run, --delete, --confirm-token <token>
-          const dryRun = process.argv.includes('--dry-run');
-          const del = process.argv.includes('--delete');
-          const tokenIdx = process.argv.indexOf('--confirm-token');
-          const confirmToken = tokenIdx !== -1 ? process.argv[tokenIdx+1] : undefined;
-          if (!dryRun && !confirmToken) {
-            console.error('Non-dry-run self-shutdown requires --confirm-token <token> (min 8 chars)');
-            process.exit(2);
-          }
-          try {
-            const body = { dryRun: dryRun || undefined, deleteInstalled: del || undefined, confirmToken };
-            const res = await CliClient.selfShutdown(body);
-            console.log(JSON.stringify(res, null, 2));
-          } catch (e) {
-            console.error('self-shutdown failed:', e?.message ?? e);
-            process.exit(3);
-          }
-          process.exit(0);
-    } catch (e) {
-      console.error('CLI command failed:', e?.message ?? e);
-      process.exit(3);
+  try {
+    if (sub === 'add') {
+      const body = readJsonArg(process.argv[3], process.argv.slice(4));
+      const res = await CliClient.createApp(body); console.log(JSON.stringify(res, null, 2)); return;
     }
-  })();
-} else {
-  console.error(`deployer: unknown command "${cmd}"\n`);
-  printUsage();
-  process.exit(1);
+    if (sub === 'update') {
+      const appId = process.argv[3]; if (!appId) { console.error('update requires <appId> <json|@file>'); printUsage(); process.exit(2); }
+      const body = readJsonArg(process.argv[4], process.argv.slice(5)); const res = await CliClient.updateApp(appId, body); console.log(JSON.stringify(res, null, 2)); return;
+    }
+    if (sub === 'remove') { const appId = process.argv[3]; if (!appId) { console.error('remove requires <appId>'); printUsage(); process.exit(2); } const res = await CliClient.deleteApp(appId); console.log(JSON.stringify(res, null, 2)); return; }
+    if (sub === 'list') { const res = await CliClient.listApps(); console.log(JSON.stringify(res, null, 2)); return; }
+    if (sub === 'get') { const appId = process.argv[3]; if (!appId) { console.error('get requires <appId>'); printUsage(); process.exit(2); } const res = await CliClient.getApp(appId); console.log(JSON.stringify(res, null, 2)); return; }
+    if (sub === 'deploy') {
+      const appId = process.argv[3]; if (!appId) { console.error('deploy requires <appId>'); printUsage(); process.exit(2); }
+      const payload = {}; if (process.argv.includes('--allow-db-drop')) payload.allowDbDrop = true;
+      const wait = process.argv.includes('--wait'); const res = await CliClient.deployApp(appId, payload); console.log(JSON.stringify(res, null, 2));
+      if (wait && res?.deploymentId) {
+        const id = res.deploymentId; process.stdout.write(`Waiting for deployment ${id}...\n`);
+        for (;;) { await new Promise(r => setTimeout(r,2000)); try { const status = await CliClient.getDeployment(id); process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`); if (['success','failed','rolled_back'].includes(status.status)) { process.stdout.write(`Deployment finished: ${status.status}\n`); break; } } catch (e) { process.stderr.write(`Error polling deployment: ${e?.message ?? e}\n`); } }
+      }
+      return;
+    }
+    if (sub === 'rollback') { const appId = process.argv[3]; const deploymentId = process.argv[4]; if (!appId || !deploymentId) { console.error('rollback requires <appId> <deploymentId>'); printUsage(); process.exit(2); } const wait = process.argv.includes('--wait'); const res = await CliClient.rollbackDeployment(deploymentId, {}); console.log(JSON.stringify(res, null, 2)); if (wait && res?.deploymentId) { const id = res.deploymentId; process.stdout.write(`Waiting for rollback deployment ${id}...\n`); for (;;) { await new Promise(r => setTimeout(r,2000)); try { const status = await CliClient.getDeployment(id); process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`); if (['success','failed','rolled_back'].includes(status.status)) { process.stdout.write(`Rollback finished: ${status.status}\n`); break; } } catch (e) { process.stderr.write(`Error polling rollback deployment: ${e?.message ?? e}\n`); } } } return; }
+    if (sub === 'status') { const appId = process.argv[3]; if (!appId) { console.error('status requires <appId>'); printUsage(); process.exit(2); } const res = await CliClient.getStatus(appId); console.log(JSON.stringify(res, null, 2)); return; }
+    if (sub === 'logs') { const appId = process.argv[3]; if (!appId) { console.error('logs requires <appId>'); printUsage(); process.exit(2); } const params = {}; if (process.argv.includes('--follow')) { params.follow = true; await CliClient.getLogs(appId, params); return; } if (process.argv.includes('--since')) { const idx = process.argv.indexOf('--since'); params.since = process.argv[idx+1]; } const res = await CliClient.getLogs(appId, params); console.log(JSON.stringify(res, null, 2)); return; }
+    if (sub === 'metrics') { const appId = process.argv[3]; if (!appId) { console.error('metrics requires <appId>'); printUsage(); process.exit(2); } const res = await CliClient.getMetrics(appId, {}); console.log(JSON.stringify(res, null, 2)); return; }
+
+    // New: self-update
+    if (sub === 'self-update') {
+      const nameIdx = process.argv.indexOf('--name'); const name = nameIdx !== -1 ? process.argv[nameIdx+1] : undefined; const wait = process.argv.includes('--wait'); const res = await CliClient.selfUpdate(name); console.log(JSON.stringify(res, null, 2)); if (wait && res?.deploymentId) { const id = res.deploymentId; process.stdout.write(`Waiting for deployment ${id}...\n`); for (;;) { await new Promise(r => setTimeout(r,2000)); try { const status = await CliClient.getDeployment(id); process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`); if (['success','failed','rolled_back'].includes(status.status)) { process.stdout.write(`Deployment finished: ${status.status}\n`); break; } } catch (e) { process.stderr.write(`Error polling deployment: ${e?.message ?? e}\n`); } } } return;
+    }
+
+    // New: self-shutdown
+    if (sub === 'self-shutdown') {
+      const dryRun = process.argv.includes('--dry-run'); const del = process.argv.includes('--delete'); const tokenIdx = process.argv.indexOf('--confirm-token'); const confirmToken = tokenIdx !== -1 ? process.argv[tokenIdx+1] : undefined; if (!dryRun && !confirmToken) { console.error('Non-dry-run self-shutdown requires --confirm-token <token> (min 8 chars)'); process.exit(2); }
+      const body = { dryRun: dryRun || undefined, deleteInstalled: del || undefined, confirmToken };
+      const res = await CliClient.selfShutdown(body); console.log(JSON.stringify(res, null, 2)); return;
+    }
+
+    console.error(`deployer: unknown command "${cmd}"\n`);
+    printUsage();
+    process.exit(1);
+  } catch (e) {
+    console.error('CLI command failed:', e?.message ?? e);
+    process.exit(3);
+  }
 }
+
+main();
