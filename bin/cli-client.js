@@ -109,4 +109,7 @@ export async function getMetrics(appId, params) {
 
 export async function getDeployment(deploymentId) { return callApi('GET', `/deployments/${encodeURIComponent(deploymentId)}`); }
 
-export default { createApp, updateApp, deleteApp, listApps, getApp, deployApp, rollbackDeployment, getStatus, getLogs, getMetrics };
+export async function selfUpdate(name) { return callApi('POST', '/setup/self-update', name ? { name } : undefined); }
+export async function selfShutdown(opts) { return callApi('POST', '/admin/self-shutdown', opts || {}); }
+
+export default { createApp, updateApp, deleteApp, listApps, getApp, deployApp, rollbackDeployment, getStatus, getLogs, getMetrics, getDeployment, selfUpdate, selfShutdown };

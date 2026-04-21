@@ -46,6 +46,8 @@ function printUsage() {
   console.log('  deployer add <json|@file>         Create an app (body JSON or @file.json)');
   console.log('  deployer update <appId> <json|@file>  Update an app');
   console.log('  deployer remove <appId>           Delete an app');
+    console.log('  deployer self-update [--name <appName>] [--wait]   Trigger self-update for the deployer');
+    console.log('  deployer self-shutdown [--dry-run] [--delete] [--confirm-token <token>]  Admin-only self-shutdown');
 }
 
 async function proxyApiCall(method, path, body) {
@@ -241,6 +243,51 @@ if (cmd === 'setup') {
         if (!appId) { console.error('metrics requires <appId>'); printUsage(); process.exit(2); }
         const res = await CliClient.getMetrics(appId, {});
         console.log(JSON.stringify(res, null, 2));
+        } else if (sub === 'self-update') {
+          const nameIdx = process.argv.indexOf('--name');
+          const name = nameIdx !== -1 ? process.argv[nameIdx+1] : undefined;
+          const wait = process.argv.includes('--wait');
+          try {
+            const res = await CliClient.selfUpdate(name);
+            console.log(JSON.stringify(res, null, 2));
+            if (wait && res?.deploymentId) {
+              const id = res.deploymentId;
+              process.stdout.write(`Waiting for deployment ${id}...\n`);
+              for (;;) {
+                await new Promise(r => setTimeout(r, 2000));
+                try {
+                  const status = await CliClient.getDeployment(id);
+                  process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`);
+                  if (['success','failed','rolled_back'].includes(status.status)) {
+                    process.stdout.write(`Deployment finished: ${status.status}\n`);
+                    break;
+                  }
+                } catch (e) {
+                  process.stderr.write(`Error polling deployment: ${e?.message ?? e}\n`);
+                }
+              }
+            }
+          } catch (e) {
+            console.error('self-update failed:', e?.message ?? e);
+            process.exit(3);
+          }
+        } else if (sub === 'self-shutdown') {
+          // flags: --dry-run, --delete, --confirm-token <token>
+          const dryRun = process.argv.includes('--dry-run');
+          const del = process.argv.includes('--delete');
+          const tokenIdx = process.argv.indexOf('--confirm-token');
+          const confirmToken = tokenIdx !== -1 ? process.argv[tokenIdx+1] : undefined;
+          if (!dryRun && !confirmToken) {
+            console.error('Non-dry-run self-shutdown requires --confirm-token <token> (min 8 chars)');
+            process.exit(2);
+          }
+          try {
+            const body = { dryRun: dryRun || undefined, deleteInstalled: del || undefined, confirmToken };
+            const res = await CliClient.selfShutdown(body);
+            console.log(JSON.stringify(res, null, 2));
+          } catch (e) {
+            console.error('self-shutdown failed:', e?.message ?? e);
+            process.exit(3);
       }
       process.exit(0);
     } catch (e) {
