@@ -1,3 +1,9 @@
+## Execution snapshot — execution_id: 20260421-0001
+Date: 2026-04-21T00:00:00Z
+Plan: PHASEPLAN.md (hash: 7bebd9b97c5781e7f62942b4a6a7305fa8dd6565)
+Project: deployer
+
+Summary of recent execution (phases 0-6): see `EXECUTION_LOG.md` for full chronological details.
 ## Execution snapshot — execution_id: 20260420T114200Z-001
 Date: 2026-04-20T11:42:00Z
 Plan: METRICPLAN.md (hash: c9d2fccd0e0b7dd6a422fb9fe9364c6ce798c7e1)

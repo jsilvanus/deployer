@@ -1,3 +1,33 @@
+# Phase Risks & Notices
+
+Extracted from PHASEPLAN.md and EXECUTION_LOG.md — open items and mitigations.
+
+- Detection false-positives/negatives
+  - Status: Open
+  - Phase: Phase 1
+  - Mitigation: conservative defaults, opt-out flag, and require explicit override in ambiguous cases.
+  - Owner: maintainers
+
+- Generated Dockerfiles insufficient for complex apps (native deps, custom build steps)
+  - Status: Open
+  - Phase: Phase 2
+  - Mitigation: provide `deployer.dockerfile` override and documented extension points.
+  - Owner: maintainers
+
+- Rollback gaps (leftover images/volumes)
+  - Status: Open
+  - Phase: Phase 3
+  - Mitigation: include cleanup steps in rollback, and test with failure simulations.
+  - Owner: maintainers
+
+- CI flakiness on resource-limited runners
+  - Status: Open
+  - Phase: Phase 5
+  - Mitigation: use lightweight sample apps for CI and provide an optional `--local` test mode.
+  - Owner: maintainers
+
+Notes:
+- These entries were collated automatically from plan and execution artifacts. Review ownership and mitigation timelines before next release.
 # Phase Risks — Metric Instrumentation
 
 Source: METRICPLAN.md (2026-04-20)
