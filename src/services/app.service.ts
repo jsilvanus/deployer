@@ -36,6 +36,7 @@ function rowToApp(row: typeof apps.$inferSelect): App {
     ...(row.packageName    != null ? { packageName:    row.packageName    } : {}),
     ...(row.packageVersion != null ? { packageVersion: row.packageVersion } : {}),
     ...(row.registryUrl    != null ? { registryUrl:    row.registryUrl    } : {}),
+    ...(row.runSpec       != null ? { runSpec: JSON.parse(row.runSpec) } : {}),
   };
 }
 
@@ -98,6 +99,7 @@ export class AppService {
         port:            input.port,
         packageName:     input.packageName,
         packageVersion:  input.packageVersion,
+        runSpec:         JSON.stringify(input.runSpec ?? {}),
         registryUrl:     input.registryUrl,
         apiKeyHash,
         apiKeyPrefix,
@@ -178,7 +180,7 @@ export class AppService {
     const location     = input.nginxLocation ?? existing.nginxLocation;
     await this.assertNginxUnique(domain, location, nginxEnabled, id);
 
-    const { pgAdminPassword, composeContent, internalNetwork: rawInternalNetwork, packageVersion, registryToken, registryUsername, ...otherDbFields } = input;
+    const { pgAdminPassword, composeContent, internalNetwork: rawInternalNetwork, packageVersion, registryToken, registryUsername, runSpec, ...otherDbFields } = input;
     const isDockerApp = existing.type === 'docker' || existing.type === 'compose';
     const dbFields = {
       ...otherDbFields,
@@ -201,9 +203,11 @@ export class AppService {
     }
 
     const updatedAt = new Date();
+    const setFields: any = { ...dbFields, updatedAt };
+    if (runSpec !== undefined) setFields.runSpec = JSON.stringify(runSpec ?? {});
     const [row] = await this.db
       .update(apps)
-      .set({ ...dbFields, updatedAt })
+      .set(setFields)
       .where(eq(apps.id, id))
       .returning();
     if (row) {

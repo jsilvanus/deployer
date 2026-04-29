@@ -35,6 +35,13 @@ export async function schedulesRoutes(fastify: FastifyInstance, opts: { db: Db; 
     const rows = await opts.db.select().from(scheduleRuns).where(eq(scheduleRuns.scheduleId, id));
     return rows;
   });
+
+  fastify.post('/schedules/:id/trigger', async (request, reply) => {
+    if (!request.isAdmin) return reply.code(403).send({ error: 'Admin access required' });
+    const { id } = request.params as any;
+    await svc.updateNextRun(id);
+    return reply.code(202).send({ status: 'triggered' });
+  });
 }
 
 export default schedulesRoutes;

@@ -1,5 +1,15 @@
 export type AppType = 'node' | 'python' | 'docker' | 'compose' | 'npm' | 'pypi' | 'image';
 export type DbType = 'postgres' | 'sqlite';
+export interface RunSpec {
+  runtime: 'node' | 'python' | 'image' | 'compose' | 'command';
+  command?: string[];
+  image?: string;
+  service?: string;
+  env?: Record<string, string>;
+  timeoutSec?: number;
+  ephemeral?: boolean;
+  resources?: { cpus?: number; memoryMb?: number };
+}
 
 export interface App {
   id: string;
@@ -25,6 +35,7 @@ export interface App {
   packageName?: string;
   packageVersion?: string;
   registryUrl?: string;
+  runSpec?: RunSpec;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,6 +66,7 @@ export interface CreateAppInput {
   registryUrl?: string;
   registryToken?: string;
   registryUsername?: string;
+  runSpec?: RunSpec;
 }
 
 export interface UpdateAppInput {
@@ -76,6 +88,7 @@ export interface UpdateAppInput {
   registryUrl?: string;
   registryToken?: string;
   registryUsername?: string;
+  runSpec?: Partial<RunSpec>;
 }
 
 export interface CreateAppResult {

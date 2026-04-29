@@ -15,6 +15,7 @@ import type { Db } from '../db/client.js';
 import type { Config } from '../config.js';
 import { scheduleRuns } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
+import RunExecutor from './run-executor.service.js';
 
 export class SchedulerService {
   private stopped = false;
@@ -107,6 +108,14 @@ export class SchedulerService {
             } else if (s.type === 'self-shutdown') {
               const svc = new (await import('./self-shutdown.service.js')).SelfShutdownService(this.db, this.config, this.logger);
               await svc.execute({ deleteInstalled: false, initiatedBy: 'scheduler' });
+            } else if (s.type === 'run') {
+              const runExecutor = new RunExecutor(this.logger);
+              const payload = typeof s.payload === 'string' ? JSON.parse(s.payload) : (s.payload ?? {});
+              const runSpec = payload.runSpec ?? (app ? (app as any).runSpec : null);
+              if (!runSpec) throw new Error('No runSpec provided for run schedule');
+              const cwd = app?.deployPath ?? undefined;
+              const res = await runExecutor.execute(runSpec as any, { cwd });
+              if (!res.success) throw new Error(res.error ?? 'run failed');
             }
 
             // mark run success

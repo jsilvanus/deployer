@@ -15,12 +15,18 @@ export async function appSchedulesRoutes(fastify: FastifyInstance, opts: { db: D
   });
 
   fastify.post('/apps/:appId/schedules', {
-    schema: { params: { type: 'object', required: ['appId'], properties: { appId: { type: 'string' } } } },
+    schema: {
+      params: { type: 'object', required: ['appId'], properties: { appId: { type: 'string' } } },
+      body: { type: 'object', required: ['type','cron'], properties: { type: { type: 'string' }, cron: { type: 'string' }, payload: { type: 'object' }, timezone: { type: 'string' } }, additionalProperties: false }
+    },
   }, async (request, reply) => {
     const { appId } = request.params as { appId: string };
     if (!request.isAdmin && request.scopedAppId !== appId) return reply.code(403).send({ error: 'Forbidden' });
     const body = request.body as any;
-    const id = await svc.create({ appId, type: body.type, cron: body.cron, payload: body.payload, createdBy: request.isAdmin ? 'admin' : (request.scopedAppId ?? 'unknown') });
+    // Disallow unsafe `command` runtime for non-admin callers
+    const runSpec = body?.payload?.runSpec ?? null;
+    if (runSpec && runSpec.runtime === 'command' && !request.isAdmin) return reply.code(403).send({ error: 'Admin access required for command runtime' });
+    const id = await svc.create({ appId, type: body.type, cron: body.cron, payload: body.payload, timezone: body.timezone, createdBy: request.isAdmin ? 'admin' : (request.scopedAppId ?? 'unknown') });
     return reply.code(201).send({ id });
   });
 
