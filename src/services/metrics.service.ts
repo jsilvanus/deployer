@@ -14,13 +14,18 @@ export interface MetricPoint {
   memoryMb: number | null;
 }
 
+const MEMORY_MULTIPLIERS: Record<string, number> = {
+  b: 1 / (1024 * 1024),
+  kib: 1 / 1024,
+  mib: 1,
+  gib: 1024,
+  tib: 1024 * 1024,
+};
+
 function parseMemoryMb(memUsage: string): number | null {
   const match = /^([\d.]+)\s*(B|KiB|MiB|GiB|TiB)/i.exec(memUsage.trim());
   if (!match) return null;
-  const multipliers: Record<string, number> = {
-    b: 1 / (1024 * 1024), kib: 1 / 1024, mib: 1, gib: 1024, tib: 1024 * 1024,
-  };
-  return parseFloat(match[1]!) * (multipliers[match[2]!.toLowerCase()] ?? 1);
+  return parseFloat(match[1]!) * (MEMORY_MULTIPLIERS[match[2]!.toLowerCase()] ?? 1);
 }
 
 export class MetricsService {

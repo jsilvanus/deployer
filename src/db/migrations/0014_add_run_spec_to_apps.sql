@@ -3,7 +3,8 @@
 PRAGMA foreign_keys=off;
 BEGIN TRANSACTION;
 
-ALTER TABLE apps ADD COLUMN run_spec TEXT NOT NULL DEFAULT '{}';
+-- Add column as nullable to avoid full-table rewrite on large SQLite DBs.
+ALTER TABLE apps ADD COLUMN run_spec TEXT;
 
 COMMIT;
 PRAGMA foreign_keys=on;

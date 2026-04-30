@@ -12,19 +12,21 @@ import * as CliClient from './cli-client.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function loadDotEnv() {
-  try {
-    const content = readFileSync(resolve(process.cwd(), '.env'), 'utf8');
-    for (const line of content.split('\n')) {
-      const t = line.trim();
-      if (!t || t.startsWith('#')) continue;
-      const eq = t.indexOf('=');
-      if (eq === -1) continue;
-      const k = t.slice(0, eq).trim();
-      const v = t.slice(eq + 1).trim().replace(/^['"]|['"]$/g, '');
-      if (!(k in process.env)) process.env[k] = v;
+async function waitForDeployment(id) {
+  process.stdout.write(`Waiting for deployment ${id}...\n`);
+  for (;;) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const status = await CliClient.getDeployment(id);
+      process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`);
+      if (['success','failed','rolled_back'].includes(status.status)) {
+        process.stdout.write(`Deployment finished: ${status.status}\n`);
+        break;
+      }
+    } catch (e) {
+      process.stderr.write(`Error polling deployment: ${e?.message ?? e}\n`);
     }
-  } catch {}
+  }
 }
 
 function printUsage() {
@@ -67,7 +69,7 @@ async function main() {
     return;
   }
   if (cmd === 'server' || cmd === 'start') {
-    loadDotEnv();
+    CliClient.loadDotEnv();
     spawn('node', [resolve(__dirname, '..', 'dist', 'index.js')], { stdio: 'inherit', env: process.env }).on('exit', c => process.exit(c ?? 0));
     return;
   }
@@ -91,19 +93,32 @@ async function main() {
       const payload = {}; if (process.argv.includes('--allow-db-drop')) payload.allowDbDrop = true;
       const wait = process.argv.includes('--wait'); const res = await CliClient.deployApp(appId, payload); console.log(JSON.stringify(res, null, 2));
       if (wait && res?.deploymentId) {
-        const id = res.deploymentId; process.stdout.write(`Waiting for deployment ${id}...\n`);
-        for (;;) { await new Promise(r => setTimeout(r,2000)); try { const status = await CliClient.getDeployment(id); process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`); if (['success','failed','rolled_back'].includes(status.status)) { process.stdout.write(`Deployment finished: ${status.status}\n`); break; } } catch (e) { process.stderr.write(`Error polling deployment: ${e?.message ?? e}\n`); } }
+        await waitForDeployment(res.deploymentId);
       }
       return;
     }
-    if (sub === 'rollback') { const appId = process.argv[3]; const deploymentId = process.argv[4]; if (!appId || !deploymentId) { console.error('rollback requires <appId> <deploymentId>'); printUsage(); process.exit(2); } const wait = process.argv.includes('--wait'); const res = await CliClient.rollbackDeployment(deploymentId, {}); console.log(JSON.stringify(res, null, 2)); if (wait && res?.deploymentId) { const id = res.deploymentId; process.stdout.write(`Waiting for rollback deployment ${id}...\n`); for (;;) { await new Promise(r => setTimeout(r,2000)); try { const status = await CliClient.getDeployment(id); process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`); if (['success','failed','rolled_back'].includes(status.status)) { process.stdout.write(`Rollback finished: ${status.status}\n`); break; } } catch (e) { process.stderr.write(`Error polling rollback deployment: ${e?.message ?? e}\n`); } } } return; }
+    if (sub === 'rollback') {
+      const appId = process.argv[3]; const deploymentId = process.argv[4];
+      if (!appId || !deploymentId) { console.error('rollback requires <appId> <deploymentId>'); printUsage(); process.exit(2); }
+      const wait = process.argv.includes('--wait');
+      const res = await CliClient.rollbackDeployment(deploymentId, {});
+      console.log(JSON.stringify(res, null, 2));
+      if (wait && res?.deploymentId) { await waitForDeployment(res.deploymentId); }
+      return;
+    }
     if (sub === 'status') { const appId = process.argv[3]; if (!appId) { console.error('status requires <appId>'); printUsage(); process.exit(2); } const res = await CliClient.getStatus(appId); console.log(JSON.stringify(res, null, 2)); return; }
     if (sub === 'logs') { const appId = process.argv[3]; if (!appId) { console.error('logs requires <appId>'); printUsage(); process.exit(2); } const params = {}; if (process.argv.includes('--follow')) { params.follow = true; await CliClient.getLogs(appId, params); return; } if (process.argv.includes('--since')) { const idx = process.argv.indexOf('--since'); params.since = process.argv[idx+1]; } const res = await CliClient.getLogs(appId, params); console.log(JSON.stringify(res, null, 2)); return; }
     if (sub === 'metrics') { const appId = process.argv[3]; if (!appId) { console.error('metrics requires <appId>'); printUsage(); process.exit(2); } const res = await CliClient.getMetrics(appId, {}); console.log(JSON.stringify(res, null, 2)); return; }
 
     // New: self-update
     if (sub === 'self-update') {
-      const nameIdx = process.argv.indexOf('--name'); const name = nameIdx !== -1 ? process.argv[nameIdx+1] : undefined; const wait = process.argv.includes('--wait'); const res = await CliClient.selfUpdate(name); console.log(JSON.stringify(res, null, 2)); if (wait && res?.deploymentId) { const id = res.deploymentId; process.stdout.write(`Waiting for deployment ${id}...\n`); for (;;) { await new Promise(r => setTimeout(r,2000)); try { const status = await CliClient.getDeployment(id); process.stdout.write(`status: ${status.status} currentStep: ${status.currentStep ?? '-'}\n`); if (['success','failed','rolled_back'].includes(status.status)) { process.stdout.write(`Deployment finished: ${status.status}\n`); break; } } catch (e) { process.stderr.write(`Error polling deployment: ${e?.message ?? e}\n`); } } } return;
+      const nameIdx = process.argv.indexOf('--name');
+      const name = nameIdx !== -1 ? process.argv[nameIdx+1] : undefined;
+      const wait = process.argv.includes('--wait');
+      const res = await CliClient.selfUpdate(name);
+      console.log(JSON.stringify(res, null, 2));
+      if (wait && res?.deploymentId) { await waitForDeployment(res.deploymentId); }
+      return;
     }
 
     // New: self-shutdown

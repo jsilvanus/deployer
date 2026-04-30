@@ -41,6 +41,8 @@ export class SchedulerService {
     while (!this.stopped) {
       try {
         const due = await scheduleSvc.listForDue(new Date());
+        // Reuse a single RunExecutor for this poll to avoid repeated allocations
+        const runExecutor = new RunExecutor(this.logger);
         for (const s of due) {
           this.logger.info({ scheduleId: s.id, type: s.type }, 'Evaluating scheduled task');
           // Acquire lock to avoid duplicate execution across instances
@@ -109,7 +111,6 @@ export class SchedulerService {
               const svc = new (await import('./self-shutdown.service.js')).SelfShutdownService(this.db, this.config, this.logger);
               await svc.execute({ deleteInstalled: false, initiatedBy: 'scheduler' });
             } else if (s.type === 'run') {
-              const runExecutor = new RunExecutor(this.logger);
               const payload = typeof s.payload === 'string' ? JSON.parse(s.payload) : (s.payload ?? {});
               const runSpec = payload.runSpec ?? (app ? (app as any).runSpec : null);
               if (!runSpec) throw new Error('No runSpec provided for run schedule');

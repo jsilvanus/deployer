@@ -1,3 +1,18 @@
+const runSpecSchema = {
+  type: 'object',
+  properties: {
+    runtime: { type: 'string', enum: ['node','python','image','compose','command'] },
+    command: { type: 'array', items: { type: 'string' } },
+    image: { type: 'string' },
+    service: { type: 'string' },
+    env: { type: 'object', additionalProperties: { type: 'string' } },
+    timeoutSec: { type: 'integer', minimum: 1 },
+    ephemeral: { type: 'boolean' },
+    resources: { type: 'object', properties: { cpus: { type: 'number' }, memoryMb: { type: 'number' } }, additionalProperties: false },
+  },
+  additionalProperties: false,
+};
+
 export const createAppBody = {
   type: 'object',
   required: ['name', 'type', 'deployPath'],
@@ -23,20 +38,7 @@ export const createAppBody = {
     registryUrl:      { type: 'string', minLength: 1 },
     registryToken:    { type: 'string', minLength: 1 },
     registryUsername: { type: 'string', minLength: 1 },
-    runSpec: {
-      type: 'object',
-      properties: {
-        runtime: { type: 'string', enum: ['node','python','image','compose','command'] },
-        command: { type: 'array', items: { type: 'string' } },
-        image: { type: 'string' },
-        service: { type: 'string' },
-        env: { type: 'object', additionalProperties: { type: 'string' } },
-        timeoutSec: { type: 'integer', minimum: 1 },
-        ephemeral: { type: 'boolean' },
-        resources: { type: 'object', properties: { cpus: { type: 'number' }, memoryMb: { type: 'number' } }, additionalProperties: false },
-      },
-      additionalProperties: false,
-    },
+    runSpec: runSpecSchema,
   },
   additionalProperties: false,
 } as const;
@@ -59,20 +61,7 @@ export const updateAppBody = {
     registryUrl:      { type: 'string', minLength: 1 },
     registryToken:    { type: 'string', minLength: 1 },
     registryUsername: { type: 'string', minLength: 1 },
-    runSpec: {
-      type: 'object',
-      properties: {
-        runtime: { type: 'string', enum: ['node','python','image','compose','command'] },
-        command: { type: 'array', items: { type: 'string' } },
-        image: { type: 'string' },
-        service: { type: 'string' },
-        env: { type: 'object', additionalProperties: { type: 'string' } },
-        timeoutSec: { type: 'integer', minimum: 1 },
-        ephemeral: { type: 'boolean' },
-        resources: { type: 'object', properties: { cpus: { type: 'number' }, memoryMb: { type: 'number' } }, additionalProperties: false },
-      },
-      additionalProperties: false,
-    },
+    runSpec: runSpecSchema,
   },
   additionalProperties: false,
 } as const;
