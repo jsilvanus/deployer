@@ -10,6 +10,15 @@ import { ConflictError } from '../errors.js';
 import type { LastModifiedCache } from '../cache/last-modified.cache.js';
 
 function rowToApp(row: typeof apps.$inferSelect): App {
+  let parsedRunSpec: any = undefined;
+  if (row.runSpec != null) {
+    try {
+      parsedRunSpec = JSON.parse(row.runSpec);
+    } catch {
+      parsedRunSpec = undefined;
+    }
+  }
+
   return {
     id:            row.id,
     name:          row.name,
@@ -36,7 +45,7 @@ function rowToApp(row: typeof apps.$inferSelect): App {
     ...(row.packageName    != null ? { packageName:    row.packageName    } : {}),
     ...(row.packageVersion != null ? { packageVersion: row.packageVersion } : {}),
     ...(row.registryUrl    != null ? { registryUrl:    row.registryUrl    } : {}),
-    ...(row.runSpec       != null ? { runSpec: JSON.parse(row.runSpec) } : {}),
+    ...(parsedRunSpec     != null ? { runSpec: parsedRunSpec } : {}),
   };
 }
 

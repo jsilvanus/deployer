@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs';
 
-function loadDotEnv() {
+export function loadDotEnv() {
   try {
     const content = readFileSync(new URL('./.env', import.meta.url).pathname, 'utf8');
     for (const line of content.split('\n')) {

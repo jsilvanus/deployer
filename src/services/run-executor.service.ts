@@ -1,22 +1,9 @@
 import { execa } from 'execa';
 import type { AnyLogger } from '../types/logger.js';
-import { DockerService } from './docker.service.js';
-
-export interface RunSpec {
-  runtime: 'node' | 'python' | 'image' | 'compose' | 'command';
-  command?: string[];
-  image?: string;
-  service?: string;
-  env?: Record<string, string>;
-  timeoutSec?: number;
-  ephemeral?: boolean;
-}
+import type { RunSpec } from '../types/app.js';
 
 export class RunExecutor {
-  private docker: DockerService;
-  constructor(private logger: AnyLogger) {
-    this.docker = new DockerService(this.logger);
-  }
+  constructor(private logger: AnyLogger) {}
 
   async execute(runSpec: RunSpec, opts: { cwd?: string } = {}): Promise<{ success: boolean; code?: number | null; stdout?: string; stderr?: string; error?: string }> {
     const timeout = (runSpec.timeoutSec ?? 300) * 1000;
