@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { deployments, deploymentSnapshots } from '../db/schema.js';
 import type { Db } from '../db/client.js';
 import type { Deployment, DeploymentSnapshot, DeploymentOperation, TriggeredBy } from '../types/index.js';
@@ -107,7 +107,6 @@ export class DeploymentService {
   }
 
   async hasRunningDeployment(appId: string): Promise<boolean> {
-    const { and } = await import('drizzle-orm');
     const rows = await this.db
       .select({ id: deployments.id })
       .from(deployments)

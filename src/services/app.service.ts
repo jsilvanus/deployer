@@ -1,5 +1,4 @@
-import { randomBytes, createHash } from 'node:crypto';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, createHash, randomUUID } from 'node:crypto';
 import { eq, desc, and, ne } from 'drizzle-orm';
 import { apps, deployments } from '../db/schema.js';
 import type { Db } from '../db/client.js';
@@ -190,7 +189,7 @@ export class AppService {
     await this.assertNginxUnique(domain, location, nginxEnabled, id);
 
     const { pgAdminPassword, composeContent, internalNetwork: rawInternalNetwork, packageVersion, registryToken, registryUsername, runSpec, ...otherDbFields } = input;
-    const isDockerApp = existing.type === 'docker' || existing.type === 'compose';
+    const isDockerApp = existing.type === 'docker' || existing.type === 'compose' || existing.type === 'image';
     const dbFields = {
       ...otherDbFields,
       ...(isDockerApp && rawInternalNetwork !== undefined ? { internalNetwork: rawInternalNetwork } : {}),
