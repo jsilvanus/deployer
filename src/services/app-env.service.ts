@@ -31,7 +31,7 @@ export class AppEnvService {
     const ciphertext = combined.subarray(0, combined.length - 16);
     const decipher = createDecipheriv(ALGORITHM, this.keyBuffer, iv);
     decipher.setAuthTag(authTag);
-    return decipher.update(ciphertext) + decipher.final('utf8');
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
   }
 
   async set(appId: string, key: string, value: string): Promise<void> {

@@ -1,4 +1,5 @@
 import { setTimeout as wait } from 'node:timers/promises';
+import { randomUUID } from 'node:crypto';
 import { ScheduleService } from './schedule.service.js';
 import { ScheduleLockService } from './schedule-lock.service.js';
 import { DeploymentService } from './deployment.service.js';
@@ -55,7 +56,7 @@ export class SchedulerService {
 
           // record run start
           const runId = await this.db.insert(scheduleRuns).values({
-            id: require('crypto').randomUUID(),
+            id: randomUUID(),
             scheduleId: s.id,
             status: 'running',
             startedAt: new Date(),
@@ -101,7 +102,7 @@ export class SchedulerService {
             } else if (s.type === 'self-update') {
               // trigger deployer self-update via orchestrator if registered
               const appName = 'deployer';
-              const app = await appSvc.findByName ? await appSvc.findByName(appName) : null;
+              const app = await appSvc.findByName(appName);
               if (app) {
                 const deployment = await deploymentSvc.create(app.id, 'update', 'mcp');
                 const selfUpdatePlan = app.type === 'npm' ? (await import('../core/plans/update-npm.plan.js')).updateNpmPlan : (await import('../core/plans/update-deployer.plan.js')).updateDeployerPlan;

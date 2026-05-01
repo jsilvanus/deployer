@@ -1,6 +1,6 @@
 import fp from 'fastify-plugin';
 import type { FastifyInstance } from 'fastify';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { requestLogs } from '../../db/schema.js';
 import { runExclusive } from '../../db/client.js';
 
@@ -19,7 +19,10 @@ export default fp(async function requestAudit(fastify: FastifyInstance, opts: an
       const headers = { 'x-request-id': request.headers['x-request-id'], 'x-cli-version': request.headers['x-cli-version'], authorization: request.headers['authorization'] ? 'REDACTED' : null };
       let body = '';
       try { body = request.body ? JSON.stringify(request.body) : ''; } catch { body = ''; }
-      const token = typeof request.headers['authorization'] === 'string' ? request.headers['authorization'].slice(0, 32) : null;
+      const rawAuth = request.headers['authorization'];
+      const token = typeof rawAuth === 'string' && rawAuth.startsWith('Bearer ')
+        ? createHash('sha256').update(rawAuth.slice(7)).digest('hex').slice(0, 32)
+        : null;
       await runExclusive(async () => db.insert(requestLogs).values({ id: randomUUID(), method, path, headers: JSON.stringify(headers), body: body ? (body.length > 2000 ? body.slice(0,2000) + '...(truncated)' : body) : null, statusCode: reply.statusCode, tokenInfo: token, createdAt: now }));
     } catch (err) {
       // Never fail request because audit logging failed

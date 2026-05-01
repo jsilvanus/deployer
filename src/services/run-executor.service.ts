@@ -32,7 +32,7 @@ export class RunExecutor {
         if (!runSpec.command || runSpec.command.length === 0) throw new Error('command is required for node/python/command runtimes');
         const cmd = runSpec.command[0];
         const args = runSpec.command.slice(1);
-        const r = await execa(cmd, args, { cwd: opts.cwd, timeout, env: runSpec.env ?? process.env });
+        const r = await execa(cmd, args, { cwd: opts.cwd, timeout, env: runSpec.env ? { ...process.env, ...runSpec.env } : process.env });
         return { success: true, code: r.exitCode, stdout: r.stdout, stderr: r.stderr };
       }
 
